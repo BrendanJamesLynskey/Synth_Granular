@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Granular Synthesiser</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@300;400&display=swap');
+
+:root {
+  --bg: #050510;
+  --surface: rgba(255,255,255,0.04);
+  --surface-hover: rgba(255,255,255,0.08);
+  --border: rgba(255,255,255,0.08);
+  --text: #e0e0e8;
+  --text-dim: rgba(255,255,255,0.4);
+  --accent-1: #6366f1;
+  --accent-2: #8b5cf6;
+  --accent-3: #ec4899;
+  --accent-4: #06b6d4;
+  --glow-1: rgba(99,102,241,0.3);
+  --glow-2: rgba(139,92,246,0.3);
+  --glow-3: rgba(236,72,153,0.2);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+}
+
+#vizCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+}
+
+.controls {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 16px;
+  gap: 12px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.subtitle {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+#playBtn {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-1);
+  background: rgba(99,102,241,0.15);
+  color: var(--accent-1);
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+#playBtn:hover { background: rgba(99,102,241,0.3); box-shadow: 0 0 20px var(--glow-1); }
+#playBtn.active {
+  background: var(--accent-1);
+  color: white;
+  box-shadow: 0 0 30px var(--glow-1);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  backdrop-filter: blur(20px);
+}
+
+.panel-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.param {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.param label {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  justify-content: space-between;
+}
+
+.param label .val {
+  color: var(--accent-4);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.1);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent-1);
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--glow-1);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-1);
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--glow-1);
+}
+
+.preset-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+.preset-btn:hover { background: var(--surface-hover); border-color: var(--accent-2); }
+.preset-btn.active { background: rgba(139,92,246,0.2); border-color: var(--accent-2); color: white; }
+
+.main-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.source-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.source-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+}
+.source-btn:hover { background: var(--surface-hover); }
+.source-btn.active { background: rgba(99,102,241,0.2); border-color: var(--accent-1); }
+
+.status-bar {
+  font-size: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  display: flex;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-top: 4px;
+}
+
+@media (max-width: 600px) {
+  .param-grid { grid-template-columns: repeat(2, 1fr); }
+  .controls { padding: 10px; gap: 8px; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="vizCanvas"></canvas>
+
+<div class="controls">
+  <div class="header">
+    <div>
+      <div class="title">Granular Synth</div>
+      <div class="subtitle">texture engine</div>
+    </div>
+    <button id="playBtn" onclick="togglePlay()">&#9654;</button>
+  </div>
+
+  <div class="main-area">
+    <div class="panel">
+      <div class="panel-title">Source</div>
+      <div class="source-row" id="sourceRow">
+        <button class="source-btn active" data-src="harmonic" onclick="setSource(this)">Harmonic</button>
+        <button class="source-btn" data-src="noise" onclick="setSource(this)">Noise</button>
+        <button class="source-btn" data-src="formant" onclick="setSource(this)">Formant</button>
+        <button class="source-btn" data-src="fm" onclick="setSource(this)">FM</button>
+        <button class="source-btn" data-src="choir" onclick="setSource(this)">Choir</button>
+        <button class="source-btn" data-src="metallic" onclick="setSource(this)">Metallic</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Grain Parameters</div>
+      <div class="param-grid">
+        <div class="param">
+          <label>Density <span class="val" id="densityVal">20</span></label>
+          <input type="range" min="1" max="80" value="20" id="density" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Size <span class="val" id="sizeVal">80ms</span></label>
+          <input type="range" min="5" max="500" value="80" id="size" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Pitch <span class="val" id="pitchVal">220Hz</span></label>
+          <input type="range" min="20" max="2000" value="220" id="pitch" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Spread <span class="val" id="spreadVal">0.3</span></label>
+          <input type="range" min="0" max="100" value="30" id="spread" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Shimmer <span class="val" id="shimmerVal">0.2</span></label>
+          <input type="range" min="0" max="100" value="20" id="shimmer" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Wander <span class="val" id="wanderVal">0.5</span></label>
+          <input type="range" min="0" max="100" value="50" id="wander" oninput="updateParam(this)">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Envelope & Space</div>
+      <div class="param-grid">
+        <div class="param">
+          <label>Attack <span class="val" id="attackVal">0.4</span></label>
+          <input type="range" min="1" max="100" value="40" id="attack" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Reverb <span class="val" id="reverbVal">0.6</span></label>
+          <input type="range" min="0" max="100" value="60" id="reverb" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Delay <span class="val" id="delayVal">0.3</span></label>
+          <input type="range" min="0" max="100" value="30" id="delay" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Filter <span class="val" id="filterVal">2000Hz</span></label>
+          <input type="range" min="100" max="12000" value="2000" id="filter" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Stereo <span class="val" id="stereoVal">0.7</span></label>
+          <input type="range" min="0" max="100" value="70" id="stereo" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Volume <span class="val" id="volumeVal">0.7</span></label>
+          <input type="range" min="0" max="100" value="70" id="volume" oninput="updateParam(this)">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Presets</div>
+      <div class="preset-row" id="presetRow">
+        <button class="preset-btn" onclick="loadPreset('celestial')">Celestial</button>
+        <button class="preset-btn" onclick="loadPreset('rainfall')">Rainfall</button>
+        <button class="preset-btn" onclick="loadPreset('swarm')">Swarm</button>
+        <button class="preset-btn" onclick="loadPreset('deepspace')">Deep Space</button>
+        <button class="preset-btn" onclick="loadPreset('crystals')">Crystals</button>
+        <button class="preset-btn" onclick="loadPreset('aurora')">Aurora</button>
+        <button class="preset-btn" onclick="loadPreset('whispers')">Whispers</button>
+        <button class="preset-btn" onclick="loadPreset('tectonic')">Tectonic</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Evolution</div>
+      <div class="param-grid">
+        <div class="param">
+          <label>Rate <span class="val" id="evoRateVal">0.3</span></label>
+          <input type="range" min="0" max="100" value="30" id="evoRate" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Depth <span class="val" id="evoDepthVal">0.5</span></label>
+          <input type="range" min="0" max="100" value="50" id="evoDepth" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Chaos <span class="val" id="chaosVal">0.2</span></label>
+          <input type="range" min="0" max="100" value="20" id="chaos" oninput="updateParam(this)">
+        </div>
+        <div class="param">
+          <label>Harmonics <span class="val" id="harmonicsVal">4</span></label>
+          <input type="range" min="1" max="16" value="4" id="harmonics" oninput="updateParam(this)">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span id="grainCount">grains: 0</span>
+    <span id="cpuLoad">cpu: 0%</span>
+  </div>
+</div>
+
+<script>
+// ===== GRANULAR SYNTHESIS ENGINE =====
+
+let ctx, masterGain, reverbNode, reverbGain, dryGain, delayNode, delayGain, feedbackGain;
+let filterNode, analyser, analyserData, freqData;
+let playing = false;
+let grainInterval = null;
+let activeGrains = 0;
+let grainId = 0;
+let evolutionPhase = 0;
+let wanderPhases = [0, 0, 0, 0];
+
+const params = {
+  source: 'harmonic',
+  density: 20,
+  size: 80,
+  pitch: 220,
+  spread: 0.3,
+  shimmer: 0.2,
+  wander: 0.5,
+  attack: 0.4,
+  reverb: 0.6,
+  delay: 0.3,
+  filter: 2000,
+  stereo: 0.7,
+  volume: 0.7,
+  evoRate: 0.3,
+  evoDepth: 0.5,
+  chaos: 0.2,
+  harmonics: 4
+};
+
+function initAudio() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  masterGain = ctx.createGain();
+  masterGain.gain.value = params.volume;
+
+  // Filter
+  filterNode = ctx.createBiquadFilter();
+  filterNode.type = 'lowpass';
+  filterNode.frequency.value = params.filter;
+  filterNode.Q.value = 1.5;
+
+  // Reverb
+  reverbNode = ctx.createConvolver();
+  reverbNode.buffer = createReverbIR(3.5, 0.7);
+  reverbGain = ctx.createGain();
+  reverbGain.gain.value = params.reverb;
+  dryGain = ctx.createGain();
+  dryGain.gain.value = 1 - params.reverb * 0.4;
+
+  // Delay
+  delayNode = ctx.createDelay(2.0);
+  delayNode.delayTime.value = 0.37;
+  delayGain = ctx.createGain();
+  delayGain.gain.value = params.delay;
+  feedbackGain = ctx.createGain();
+  feedbackGain.gain.value = 0.45;
+
+  // Analyser
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyserData = new Uint8Array(analyser.frequencyBinCount);
+  freqData = new Uint8Array(analyser.frequencyBinCount);
+
+  // Routing
+  filterNode.connect(dryGain);
+  filterNode.connect(reverbNode);
+  reverbNode.connect(reverbGain);
+  filterNode.connect(delayNode);
+  delayNode.connect(delayGain);
+  delayNode.connect(feedbackGain);
+  feedbackGain.connect(delayNode);
+
+  dryGain.connect(masterGain);
+  reverbGain.connect(masterGain);
+  delayGain.connect(masterGain);
+
+  masterGain.connect(analyser);
+  analyser.connect(ctx.destination);
+}
+
+function createReverbIR(duration, decay) {
+  const len = ctx.sampleRate * duration;
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const t = i / ctx.sampleRate;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay * 2);
+      // Early reflections
+      if (i < ctx.sampleRate * 0.08) {
+        data[i] += (Math.random() * 2 - 1) * 0.3 * Math.pow(1 - i / (ctx.sampleRate * 0.08), 3);
+      }
+    }
+  }
+  return buf;
+}
+
+function getEvolvingPitch() {
+  const t = ctx.currentTime;
+  const rate = params.evoRate * 0.5;
+  const depth = params.evoDepth;
+
+  let pitch = params.pitch;
+
+  // Slow wandering pitch modulation
+  const w1 = Math.sin(t * rate * 0.13) * depth * 0.15;
+  const w2 = Math.sin(t * rate * 0.07 + 1.3) * depth * 0.08;
+  const w3 = Math.sin(t * rate * 0.31 + 2.7) * depth * 0.05;
+  pitch *= (1 + w1 + w2 + w3);
+
+  // Spread: random pitch variation per grain
+  const spreadAmt = params.spread;
+  pitch *= (1 + (Math.random() * 2 - 1) * spreadAmt * 0.5);
+
+  // Chaos: occasional jumps
+  if (Math.random() < params.chaos * 0.1) {
+    const intervals = [0.5, 0.667, 0.75, 1.333, 1.5, 2.0, 0.25, 3.0];
+    pitch *= intervals[Math.floor(Math.random() * intervals.length)];
+  }
+
+  return pitch;
+}
+
+function createGrain() {
+  if (!ctx || !playing) return;
+  const now = ctx.currentTime;
+  const dur = params.size / 1000;
+  const pitch = getEvolvingPitch();
+  const attackRatio = params.attack;
+
+  // Grain envelope
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(0.3, now + dur * attackRatio);
+  env.gain.linearRampToValueAtTime(0, now + dur);
+
+  // Stereo panning
+  let panner = null;
+  if (ctx.createStereoPanner) {
+    panner = ctx.createStereoPanner();
+    panner.pan.value = (Math.random() * 2 - 1) * params.stereo;
+  }
+
+  const dest = panner || env;
+  if (panner) env.connect(panner);
+  (panner || env).connect(filterNode);
+
+  // Create source based on type
+  switch (params.source) {
+    case 'harmonic':
+      createHarmonicGrain(env, pitch, now, dur);
+      break;
+    case 'noise':
+      createNoiseGrain(env, pitch, now, dur);
+      break;
+    case 'formant':
+      createFormantGrain(env, pitch, now, dur);
+      break;
+    case 'fm':
+      createFMGrain(env, pitch, now, dur);
+      break;
+    case 'choir':
+      createChoirGrain(env, pitch, now, dur);
+      break;
+    case 'metallic':
+      createMetallicGrain(env, pitch, now, dur);
+      break;
+  }
+
+  activeGrains++;
+  grainId++;
+  setTimeout(() => { activeGrains = Math.max(0, activeGrains - 1); }, dur * 1000 + 50);
+}
+
+function createHarmonicGrain(env, pitch, now, dur) {
+  const numH = params.harmonics;
+  for (let h = 1; h <= numH; h++) {
+    const osc = ctx.createOscillator();
+    const hGain = ctx.createGain();
+    // Evolving harmonic amplitudes
+    const t = now * params.evoRate;
+    const amp = (1 / (h * (1 + Math.sin(t + h) * 0.3 * params.evoDepth))) * 0.15;
+    hGain.gain.value = amp;
+
+    osc.type = h % 2 === 0 ? 'sine' : (Math.random() > 0.7 ? 'triangle' : 'sine');
+    osc.frequency.value = pitch * h;
+
+    // Shimmer: micro pitch drift
+    if (params.shimmer > 0) {
+      osc.detune.setValueAtTime((Math.random() * 2 - 1) * params.shimmer * 40, now);
+      osc.detune.linearRampToValueAtTime((Math.random() * 2 - 1) * params.shimmer * 40, now + dur);
+    }
+
+    osc.connect(hGain);
+    hGain.connect(env);
+    osc.start(now);
+    osc.stop(now + dur + 0.01);
+  }
+}
+
+function createNoiseGrain(env, pitch, now, dur) {
+  const bufSize = Math.ceil(ctx.sampleRate * dur);
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+
+  // Filtered noise with resonance at pitch
+  const phaseInc = pitch / ctx.sampleRate * Math.PI * 2;
+  let phase = Math.random() * Math.PI * 2;
+  for (let i = 0; i < bufSize; i++) {
+    const noise = Math.random() * 2 - 1;
+    phase += phaseInc * (1 + noise * params.shimmer * 0.5);
+    data[i] = (noise * 0.3 + Math.sin(phase) * 0.7) * 0.2;
+  }
+
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(env);
+  src.start(now);
+}
+
+function createFormantGrain(env, pitch, now, dur) {
+  const vowels = [
+    [800, 1150, 2900],   // a
+    [350, 2000, 2800],   // e
+    [270, 2140, 2950],   // i
+    [450, 800, 2830],    // o
+    [325, 700, 2530],    // u
+  ];
+  const t = ctx.currentTime * params.evoRate * 0.2;
+  const vi = Math.floor((Math.sin(t) * 0.5 + 0.5) * vowels.length) % vowels.length;
+  const formants = vowels[vi];
+
+  // Pulse source
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.value = pitch;
+
+  const formantGains = formants.map((freq, i) => {
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = freq;
+    bp.Q.value = 8 + i * 4;
+    const g = ctx.createGain();
+    g.gain.value = 0.12 / (i + 1);
+    osc.connect(bp);
+    bp.connect(g);
+    g.connect(env);
+    return g;
+  });
+
+  osc.start(now);
+  osc.stop(now + dur + 0.01);
+}
+
+function createFMGrain(env, pitch, now, dur) {
+  const modRatio = [1, 1.5, 2, 3, 0.5, 1.414][Math.floor(Math.random() * 6)];
+  const modDepth = pitch * (0.5 + Math.random() * params.shimmer * 4);
+
+  const mod = ctx.createOscillator();
+  const modGain = ctx.createGain();
+  const carrier = ctx.createOscillator();
+  const cGain = ctx.createGain();
+
+  mod.frequency.value = pitch * modRatio;
+  modGain.gain.value = modDepth;
+  carrier.frequency.value = pitch;
+  cGain.gain.value = 0.15;
+
+  // Evolving modulation depth
+  modGain.gain.setValueAtTime(modDepth * 0.2, now);
+  modGain.gain.linearRampToValueAtTime(modDepth, now + dur * 0.4);
+  modGain.gain.linearRampToValueAtTime(modDepth * 0.1, now + dur);
+
+  mod.connect(modGain);
+  modGain.connect(carrier.frequency);
+  carrier.connect(cGain);
+  cGain.connect(env);
+
+  mod.start(now);
+  carrier.start(now);
+  mod.stop(now + dur + 0.01);
+  carrier.stop(now + dur + 0.01);
+}
+
+function createChoirGrain(env, pitch, now, dur) {
+  const voices = 3 + Math.floor(Math.random() * 3);
+  for (let v = 0; v < voices; v++) {
+    const osc = ctx.createOscillator();
+    const vGain = ctx.createGain();
+
+    osc.type = Math.random() > 0.5 ? 'sine' : 'triangle';
+    const detune = (Math.random() * 2 - 1) * 15 + Math.sin(now * 0.7 + v) * 8;
+    osc.frequency.value = pitch;
+    osc.detune.value = detune;
+
+    // Vibrato
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 4.5 + Math.random() * 2;
+    lfoGain.gain.value = 5 + params.shimmer * 10;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.detune);
+
+    vGain.gain.value = 0.08 / voices;
+    osc.connect(vGain);
+    vGain.connect(env);
+
+    osc.start(now + Math.random() * 0.01);
+    lfo.start(now);
+    osc.stop(now + dur + 0.01);
+    lfo.stop(now + dur + 0.01);
+  }
+}
+
+function createMetallicGrain(env, pitch, now, dur) {
+  const ratios = [1, 1.414, 1.732, 2.236, 2.646, 3.162];
+  const numPartials = Math.min(params.harmonics, 6);
+  for (let i = 0; i < numPartials; i++) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = pitch * ratios[i % ratios.length] * (1 + Math.random() * 0.02);
+    g.gain.value = 0.1 / (i + 1);
+    // Inharmonic decay - higher partials decay faster
+    g.gain.setValueAtTime(0.1 / (i + 1), now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur * (1 - i * 0.1));
+    osc.connect(g);
+    g.connect(env);
+    osc.start(now);
+    osc.stop(now + dur + 0.01);
+  }
+}
+
+function startGrainScheduler() {
+  if (grainInterval) clearInterval(grainInterval);
+  scheduleGrains();
+}
+
+function scheduleGrains() {
+  if (!playing) return;
+  const intervalMs = 1000 / params.density;
+
+  // Schedule grain with slight timing jitter
+  const jitter = (Math.random() * 0.5 + 0.75);
+  createGrain();
+
+  grainInterval = setTimeout(scheduleGrains, intervalMs * jitter);
+}
+
+function stopGrainScheduler() {
+  if (grainInterval) {
+    clearTimeout(grainInterval);
+    grainInterval = null;
+  }
+}
+
+// ===== EVOLUTION ENGINE =====
+let evolutionTimer = null;
+
+function startEvolution() {
+  if (evolutionTimer) clearInterval(evolutionTimer);
+  evolutionTimer = setInterval(() => {
+    if (!playing) return;
+    evolutionPhase += 0.01;
+
+    // Evolve filter
+    const filterBase = params.filter;
+    const filterMod = Math.sin(evolutionPhase * params.evoRate * 2) * params.evoDepth * filterBase * 0.3;
+    if (filterNode) filterNode.frequency.value = Math.max(100, filterBase + filterMod);
+
+    // Evolve reverb mix
+    const revMod = Math.sin(evolutionPhase * params.evoRate * 0.7 + 1) * params.evoDepth * 0.15;
+    if (reverbGain) reverbGain.gain.value = Math.max(0, Math.min(1, params.reverb + revMod));
+
+    // Evolve delay time subtly
+    if (delayNode) {
+      const delMod = Math.sin(evolutionPhase * params.evoRate * 0.3 + 2.5) * params.evoDepth * 0.08;
+      delayNode.delayTime.value = 0.37 + delMod;
+    }
+
+    // Update wander phases
+    for (let i = 0; i < wanderPhases.length; i++) {
+      wanderPhases[i] += 0.003 * (i + 1) * params.wander;
+    }
+  }, 50);
+}
+
+function stopEvolution() {
+  if (evolutionTimer) {
+    clearInterval(evolutionTimer);
+    evolutionTimer = null;
+  }
+}
+
+// ===== UI =====
+
+function togglePlay() {
+  const btn = document.getElementById('playBtn');
+  if (!playing) {
+    if (!ctx) initAudio();
+    if (ctx.state === 'suspended') ctx.resume();
+    playing = true;
+    btn.classList.add('active');
+    btn.innerHTML = '&#9646;&#9646;';
+    startGrainScheduler();
+    startEvolution();
+    startViz();
+  } else {
+    playing = false;
+    btn.classList.remove('active');
+    btn.innerHTML = '&#9654;';
+    stopGrainScheduler();
+    stopEvolution();
+  }
+}
+
+function updateParam(el) {
+  const id = el.id;
+  const v = parseFloat(el.value);
+  const valEl = document.getElementById(id + 'Val');
+
+  switch(id) {
+    case 'density': params.density = v; valEl.textContent = v; break;
+    case 'size': params.size = v; valEl.textContent = v + 'ms'; break;
+    case 'pitch': params.pitch = v; valEl.textContent = Math.round(v) + 'Hz'; break;
+    case 'spread': params.spread = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'shimmer': params.shimmer = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'wander': params.wander = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'attack': params.attack = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'reverb':
+      params.reverb = v / 100;
+      valEl.textContent = (v/100).toFixed(2);
+      if (reverbGain) reverbGain.gain.value = params.reverb;
+      if (dryGain) dryGain.gain.value = 1 - params.reverb * 0.4;
+      break;
+    case 'delay':
+      params.delay = v / 100;
+      valEl.textContent = (v/100).toFixed(2);
+      if (delayGain) delayGain.gain.value = params.delay;
+      break;
+    case 'filter':
+      params.filter = v;
+      valEl.textContent = Math.round(v) + 'Hz';
+      if (filterNode) filterNode.frequency.value = v;
+      break;
+    case 'stereo': params.stereo = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'volume':
+      params.volume = v / 100;
+      valEl.textContent = (v/100).toFixed(2);
+      if (masterGain) masterGain.gain.value = params.volume;
+      break;
+    case 'evoRate': params.evoRate = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'evoDepth': params.evoDepth = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'chaos': params.chaos = v / 100; valEl.textContent = (v/100).toFixed(2); break;
+    case 'harmonics': params.harmonics = v; valEl.textContent = v; break;
+  }
+}
+
+function setSource(btn) {
+  document.querySelectorAll('.source-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  params.source = btn.dataset.src;
+}
+
+const presets = {
+  celestial: { source:'harmonic', density:12, size:300, pitch:330, spread:20, shimmer:60, wander:80, attack:70, reverb:85, delay:40, filter:6000, stereo:90, volume:70, evoRate:20, evoDepth:70, chaos:5, harmonics:8 },
+  rainfall: { source:'noise', density:60, size:30, pitch:800, spread:80, shimmer:10, wander:30, attack:20, reverb:50, delay:15, filter:8000, stereo:95, volume:55, evoRate:40, evoDepth:30, chaos:10, harmonics:2 },
+  swarm: { source:'fm', density:45, size:50, pitch:440, spread:60, shimmer:40, wander:60, attack:15, reverb:30, delay:20, filter:5000, stereo:80, volume:50, evoRate:60, evoDepth:50, chaos:40, harmonics:3 },
+  deepspace: { source:'harmonic', density:5, size:500, pitch:55, spread:10, shimmer:80, wander:90, attack:80, reverb:95, delay:60, filter:1500, stereo:70, volume:80, evoRate:10, evoDepth:80, chaos:8, harmonics:12 },
+  crystals: { source:'metallic', density:15, size:120, pitch:1200, spread:40, shimmer:70, wander:20, attack:10, reverb:70, delay:50, filter:10000, stereo:60, volume:50, evoRate:30, evoDepth:40, chaos:15, harmonics:6 },
+  aurora: { source:'choir', density:8, size:400, pitch:185, spread:15, shimmer:50, wander:70, attack:85, reverb:90, delay:35, filter:3500, stereo:85, volume:75, evoRate:15, evoDepth:60, chaos:3, harmonics:6 },
+  whispers: { source:'formant', density:10, size:200, pitch:150, spread:25, shimmer:30, wander:40, attack:60, reverb:75, delay:45, filter:2500, stereo:50, volume:45, evoRate:25, evoDepth:55, chaos:5, harmonics:4 },
+  tectonic: { source:'fm', density:3, size:450, pitch:35, spread:5, shimmer:90, wander:95, attack:90, reverb:80, delay:55, filter:800, stereo:40, volume:85, evoRate:8, evoDepth:90, chaos:20, harmonics:10 },
+};
+
+function loadPreset(name) {
+  const p = presets[name];
+  if (!p) return;
+
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  // Set source
+  document.querySelectorAll('.source-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.src === p.source);
+  });
+  params.source = p.source;
+
+  // Set all sliders
+  const mapping = {
+    density: p.density, size: p.size, pitch: p.pitch, spread: p.spread,
+    shimmer: p.shimmer, wander: p.wander, attack: p.attack, reverb: p.reverb,
+    delay: p.delay, filter: p.filter, stereo: p.stereo, volume: p.volume,
+    evoRate: p.evoRate, evoDepth: p.evoDepth, chaos: p.chaos, harmonics: p.harmonics
+  };
+
+  for (const [id, val] of Object.entries(mapping)) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = val;
+      updateParam(el);
+    }
+  }
+}
+
+// ===== VISUALIZATION =====
+
+const canvas = document.getElementById('vizCanvas');
+const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+let vizRunning = false;
+let vizFrame = null;
+
+// Particle system state
+const MAX_PARTICLES = 2000;
+let particles = [];
+let vizTime = 0;
+
+// If WebGL not available, fall back to 2D canvas
+let use2D = !gl;
+let ctx2d = use2D ? canvas.getContext('2d') : null;
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  if (gl) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+  }
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// WebGL shader-based visualization
+let shaderProgram, posBuffer, timeUniform, resUniform, audioUniform, paramsUniform;
+
+const vertSrc = `
+  attribute vec2 aPos;
+  void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+  }
+`;
+
+const fragSrc = `
+  precision highp float;
+  uniform float uTime;
+  uniform vec2 uRes;
+  uniform float uAudio[8];
+  uniform float uParams[6];
+
+  #define PI 3.14159265
+
+  // Simplex-like noise
+  vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+  vec2 mod289(vec2 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
+  vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+
+  float snoise(vec2 v) {
+    const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                       -0.577350269189626, 0.024390243902439);
+    vec2 i = floor(v + dot(v, C.yy));
+    vec2 x0 = v - i + dot(i, C.xx);
+    vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy -= i1;
+    i = mod289(i);
+    vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+    vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+    m = m*m; m = m*m;
+    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+    vec3 g;
+    g.x = a0.x * x0.x + h.x * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
+  }
+
+  float fbm(vec2 p, float t) {
+    float f = 0.0;
+    float amp = 0.5;
+    float freq = 1.0;
+    for (int i = 0; i < 5; i++) {
+      f += amp * snoise(p * freq + t * 0.1 * float(i + 1));
+      freq *= 2.1;
+      amp *= 0.5;
+    }
+    return f;
+  }
+
+  vec3 palette(float t) {
+    // Evolving color palette
+    vec3 a = vec3(0.2, 0.1, 0.3);
+    vec3 b = vec3(0.3, 0.2, 0.4);
+    vec3 c = vec3(1.0, 1.0, 0.8);
+    vec3 d = vec3(0.75, 0.35, 0.65);
+    return a + b * cos(6.28318 * (c * t + d));
+  }
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy / uRes;
+    vec2 p = (gl_FragCoord.xy - 0.5 * uRes) / min(uRes.x, uRes.y);
+
+    float t = uTime * 0.15;
+    float evoRate = uParams[0]; // evolution rate
+    float evoDepth = uParams[1]; // evolution depth
+    float chaos = uParams[2];
+    float density = uParams[3];
+    float shimmer = uParams[4];
+    float volume = uParams[5];
+
+    // Audio reactive values
+    float bass = uAudio[0];
+    float mid = uAudio[2];
+    float high = uAudio[4];
+    float energy = (bass + mid + high) / 3.0;
+
+    // Flowing noise field
+    float n1 = fbm(p * 2.0 + vec2(t * evoRate, t * evoRate * 0.7), t);
+    float n2 = fbm(p * 3.0 - vec2(t * evoRate * 0.5, t * evoRate * 0.3), t * 1.3);
+    float n3 = fbm(p * 1.5 + vec2(n1, n2) * evoDepth * 0.5, t * 0.7);
+
+    // Warped coordinates
+    vec2 wp = p + vec2(n1, n2) * evoDepth * 0.3;
+
+    // Layered patterns
+    float pattern = 0.0;
+
+    // Concentric ripples reactive to audio
+    float d = length(wp);
+    pattern += sin(d * 10.0 - t * 3.0 + bass * 5.0) * 0.3 * bass;
+
+    // Flowing streams
+    float stream = sin(wp.x * 5.0 + n3 * 3.0 + t) * cos(wp.y * 3.0 + n1 * 2.0 - t * 0.7);
+    pattern += stream * 0.4 * mid;
+
+    // Sparkle/grain visualization
+    float grain = snoise(p * 20.0 + t * 2.0) * snoise(p * 30.0 - t * 1.5);
+    pattern += grain * shimmer * high * 2.0;
+
+    // Nebula clouds
+    float nebula = n3 * 0.5 + 0.5;
+    nebula = pow(nebula, 2.0 - evoDepth);
+
+    // Color
+    float colorShift = t * 0.1 + n1 * 0.3 + pattern * 0.2;
+    vec3 col = palette(colorShift);
+
+    // Add nebula coloring
+    vec3 nebCol = palette(colorShift + 0.33) * nebula;
+    col = mix(col * 0.1, nebCol, 0.5 + pattern * 0.3);
+
+    // Audio reactive brightness
+    col *= 0.4 + energy * 1.5;
+
+    // Vignette
+    float vig = 1.0 - dot(uv - 0.5, uv - 0.5) * 1.5;
+    col *= vig;
+
+    // Chaos adds color fragmentation
+    if (chaos > 0.1) {
+      float frag = snoise(p * 40.0 * chaos + t * 5.0);
+      vec3 chaosCol = palette(frag + t);
+      col = mix(col, chaosCol * energy, chaos * 0.3 * step(0.7, frag));
+    }
+
+    // Subtle film grain
+    float filmGrain = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453) - 0.5) * 0.03;
+    col += filmGrain;
+
+    // Keep dark background when not playing
+    col *= volume;
+
+    // Minimum ambient glow
+    vec3 ambient = palette(t * 0.05) * 0.03;
+    col = max(col, ambient);
+
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+
+function initWebGL() {
+  if (!gl) return;
+
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, vertSrc);
+  gl.compileShader(vs);
+
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, fragSrc);
+  gl.compileShader(fs);
+
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+    console.error('Fragment shader error:', gl.getShaderInfoLog(fs));
+    use2D = true;
+    ctx2d = canvas.getContext('2d');
+    return;
+  }
+
+  shaderProgram = gl.createProgram();
+  gl.attachShader(shaderProgram, vs);
+  gl.attachShader(shaderProgram, fs);
+  gl.linkProgram(shaderProgram);
+  gl.useProgram(shaderProgram);
+
+  // Full-screen quad
+  const verts = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+  posBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+  const aPos = gl.getAttribLocation(shaderProgram, 'aPos');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  timeUniform = gl.getUniformLocation(shaderProgram, 'uTime');
+  resUniform = gl.getUniformLocation(shaderProgram, 'uRes');
+  audioUniform = gl.getUniformLocation(shaderProgram, 'uAudio[0]');
+  paramsUniform = gl.getUniformLocation(shaderProgram, 'uParams[0]');
+}
+
+function startViz() {
+  if (vizRunning) return;
+  vizRunning = true;
+  renderViz();
+}
+
+function renderViz() {
+  vizFrame = requestAnimationFrame(renderViz);
+  vizTime += 0.016;
+
+  // Get audio data
+  let audioVals = new Float32Array(8);
+  if (analyser && playing) {
+    analyser.getByteFrequencyData(freqData);
+    // Divide spectrum into 8 bands
+    const bandSize = Math.floor(freqData.length / 8);
+    for (let i = 0; i < 8; i++) {
+      let sum = 0;
+      for (let j = 0; j < bandSize; j++) {
+        sum += freqData[i * bandSize + j];
+      }
+      audioVals[i] = (sum / bandSize) / 255;
+    }
+  }
+
+  if (gl && shaderProgram) {
+    gl.uniform1f(timeUniform, vizTime);
+    gl.uniform2f(resUniform, canvas.width, canvas.height);
+    gl.uniform1fv(audioUniform, audioVals);
+
+    const paramVals = new Float32Array([
+      params.evoRate, params.evoDepth, params.chaos,
+      params.density / 80, params.shimmer, playing ? params.volume : 0.05
+    ]);
+    gl.uniform1fv(paramsUniform, paramVals);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  } else if (ctx2d) {
+    render2D(audioVals);
+  }
+
+  // Update status
+  document.getElementById('grainCount').textContent = 'grains: ' + activeGrains;
+  const cpuEst = Math.min(99, Math.round(activeGrains * 1.5));
+  document.getElementById('cpuLoad').textContent = 'cpu: ~' + cpuEst + '%';
+}
+
+// 2D Canvas fallback
+function render2D(audioVals) {
+  const w = canvas.width, h = canvas.height;
+  ctx2d.fillStyle = 'rgba(5,5,16,0.15)';
+  ctx2d.fillRect(0, 0, w, h);
+
+  const energy = audioVals[0] * 0.4 + audioVals[2] * 0.3 + audioVals[4] * 0.3;
+  const cx = w / 2, cy = h / 2;
+
+  // Spawn particles from grain activity
+  if (playing && Math.random() < params.density * 0.05) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 0.5 + Math.random() * 2 + energy * 3;
+    const hue = (vizTime * 20 + Math.random() * 60) % 360;
+    particles.push({
+      x: cx + Math.cos(angle) * 20,
+      y: cy + Math.sin(angle) * 20,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      decay: 0.003 + Math.random() * 0.008,
+      size: 2 + Math.random() * 4 + energy * 5,
+      hue: hue,
+      sat: 60 + Math.random() * 40,
+    });
+  }
+
+  // Update and draw particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.99;
+    p.vy *= 0.99;
+    p.life -= p.decay;
+
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+      continue;
+    }
+
+    const alpha = p.life * 0.6;
+    ctx2d.beginPath();
+    ctx2d.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx2d.fillStyle = `hsla(${p.hue}, ${p.sat}%, 65%, ${alpha})`;
+    ctx2d.fill();
+
+    // Glow
+    ctx2d.beginPath();
+    ctx2d.arc(p.x, p.y, p.size * p.life * 3, 0, Math.PI * 2);
+    ctx2d.fillStyle = `hsla(${p.hue}, ${p.sat}%, 65%, ${alpha * 0.1})`;
+    ctx2d.fill();
+  }
+
+  // Keep particle count manageable
+  while (particles.length > MAX_PARTICLES) particles.shift();
+
+  // Central glow
+  const grad = ctx2d.createRadialGradient(cx, cy, 0, cx, cy, 200 + energy * 200);
+  const hue = (vizTime * 15) % 360;
+  grad.addColorStop(0, `hsla(${hue}, 70%, 50%, ${0.05 + energy * 0.1})`);
+  grad.addColorStop(1, 'transparent');
+  ctx2d.fillStyle = grad;
+  ctx2d.fillRect(0, 0, w, h);
+}
+
+// Init visualization
+if (gl) {
+  initWebGL();
+}
+
+// Start ambient viz even before playing
+startViz();
+
+</script>
+</body>
+</html>

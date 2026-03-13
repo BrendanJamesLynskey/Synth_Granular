@@ -13,7 +13,7 @@ A browser-based granular synthesizer that generates evolving, complex sound text
 - **Audio-reactive WebGL visuals** — full-screen shader with fractal noise fields, flowing nebulae, and sparkle patterns that respond to the audio spectrum
 - **Full parameter control** — density, grain size, pitch, spread, shimmer, wander, attack shape, reverb, delay, filter, stereo width, evolution rate/depth, chaos, harmonics
 - **Desktop & mobile versions** — optimised interfaces for both screen sizes, with automatic device detection on the landing page
-- **Grain envelope graphics** — decorative background layer inspired by Barry Truax's granular synthesis diagrams, showing animated bell-curve grain envelopes and quasi-synchronous stream patterns
+- **Spectrogram graphics** — decorative background layer inspired by microsound spectral analysis, showing scrolling spectrogram visualisations with drifting harmonic bands in the indigo-violet-pink colour palette
 
 ## Quick Start
 
@@ -65,7 +65,7 @@ The synthesizer uses only native Web Audio API nodes — no external libraries:
 3. **Evolution engine** — a 50ms interval modulates filter frequency, reverb mix, and delay time using layered sine LFOs at different rates, creating slow timbral drift
 4. **Signal chain** — grains → stereo panner → biquad filter → dry/reverb/delay sends → master gain → analyser → output
 5. **Visualisation** — a full-screen WebGL fragment shader reads 8-band FFT data and synthesis parameters, rendering layered simplex noise fields with audio-reactive color, ripple, and sparkle effects. Falls back to a 2D canvas particle system on devices without WebGL
-6. **Grain graphics** — a decorative canvas layer renders animated bell-curve grain envelopes inspired by the diagrams of Barry Truax, with quasi-synchronous stream lines and asynchronous scattered grains drifting across the background
+6. **Spectrogram graphics** — a decorative canvas layer renders scrolling spectrogram visualisations inspired by microsound spectral analysis, with drifting harmonic bands and audio-reactive frequency highlighting
 
 ## History of Granular Synthesis
 

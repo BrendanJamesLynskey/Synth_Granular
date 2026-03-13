@@ -1222,298 +1222,194 @@ if (gl) {
 startViz();
 
 
-// ===== GRAIN ENVELOPE GRAPHICS LAYER =====
-// Inspired by Barry Truax's granular synthesis diagrams:
-// Bell-curve envelopes with waveforms inside, arranged in streams
-// and scattered asynchronously across the screen.
+// ===== SPECTROGRAM GRAPHICS LAYER =====
+// Scrolling spectrogram inspired by microsound analysis visualisations
 
 const grainGfxCanvas = document.getElementById('grainCanvas');
 const grainGfxCtx = grainGfxCanvas.getContext('2d');
 
-// Grain envelope objects for the decoration layer
-const decorGrains = [];
-const MAX_DECOR_GRAINS = 120;
+// Spectrogram buffer: each column is an array of frequency bin intensities
+const SPEC_BINS = 64;
+const specColumns = [];
+let specScrollOffset = 0;
+let specColumnWidth = 0;
+let specMaxColumns = 0;
 
-// Stream definitions: horizontal bands where quasi-synchronous grains flow
-const grainStreams = [];
-const NUM_STREAMS = 6;
+// Procedural harmonic state for idle animation
+const idleHarmonics = [];
+for (let i = 0; i < 8; i++) {
+  idleHarmonics.push({
+    freq: 0.05 + Math.random() * 0.4,  // normalized freq position (0=bottom, 1=top)
+    bandwidth: 0.01 + Math.random() * 0.04,
+    intensity: 0.15 + Math.random() * 0.4,
+    drift: (Math.random() - 0.5) * 0.0002,
+    phase: Math.random() * Math.PI * 2,
+    wobble: 0.001 + Math.random() * 0.003
+  });
+}
 
 function resizeGrainCanvas() {
   const dpr = window.devicePixelRatio || 1;
   grainGfxCanvas.width = window.innerWidth * dpr;
   grainGfxCanvas.height = window.innerHeight * dpr;
   grainGfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  // Reinitialize streams on resize
-  grainStreams.length = 0;
-  const h = window.innerHeight;
-  for (let i = 0; i < NUM_STREAMS; i++) {
-    grainStreams.push({
-      y: (h * 0.08) + (h * 0.84) * (i / (NUM_STREAMS - 1)),
-      speed: 0.15 + Math.random() * 0.4,
-      direction: Math.random() > 0.5 ? 1 : -1,
-      hue: 240 + (80 / NUM_STREAMS) * i,
-      density: 0.3 + Math.random() * 0.5,
-      phase: Math.random() * Math.PI * 2,
-      waviness: 5 + Math.random() * 15
-    });
-  }
+  specColumnWidth = 2;
+  specMaxColumns = Math.ceil(window.innerWidth / specColumnWidth) + 2;
 }
 
 window.addEventListener('resize', resizeGrainCanvas);
 resizeGrainCanvas();
 
-// Bell-curve (Gaussian-like) envelope function: 0..1 over normalized x (0..1)
-function bellCurve(x, attackRatio) {
-  // Attempt an asymmetric envelope: fast attack, longer decay
-  if (x < attackRatio) {
-    // Attack: raised cosine
-    const t = x / attackRatio;
-    return 0.5 - 0.5 * Math.cos(Math.PI * t);
+// Color mapping: intensity (0-1) to spectrogram color
+function specColor(intensity, binNorm) {
+  // Dark background → deep indigo → violet → pink → white-hot
+  const i = Math.max(0, Math.min(1, intensity));
+  if (i < 0.05) return 'rgba(5,5,16,0)';
+
+  let r, g, b, a;
+  if (i < 0.25) {
+    // Dark to deep indigo
+    const t = i / 0.25;
+    r = Math.floor(15 + 45 * t);
+    g = Math.floor(10 + 30 * t);
+    b = Math.floor(40 + 120 * t);
+    a = 0.3 + t * 0.3;
+  } else if (i < 0.5) {
+    // Deep indigo to violet
+    const t = (i - 0.25) / 0.25;
+    r = Math.floor(60 + 79 * t);
+    g = Math.floor(40 + 52 * t);
+    b = Math.floor(160 + 86 * t);
+    a = 0.6 + t * 0.15;
+  } else if (i < 0.75) {
+    // Violet to pink
+    const t = (i - 0.5) / 0.25;
+    r = Math.floor(139 + 97 * t);
+    g = Math.floor(92 - 20 * t);
+    b = Math.floor(246 - 93 * t);
+    a = 0.75 + t * 0.1;
   } else {
-    // Decay: raised cosine
-    const t = (x - attackRatio) / (1 - attackRatio);
-    return 0.5 + 0.5 * Math.cos(Math.PI * t);
+    // Pink to bright cyan-white
+    const t = (i - 0.75) / 0.25;
+    r = Math.floor(236 + 19 * t);
+    g = Math.floor(72 + 140 * t);
+    b = Math.floor(153 + 59 * t);
+    a = 0.85 + t * 0.15;
   }
+  return `rgba(${r},${g},${b},${a})`;
 }
 
-function spawnDecorGrain(x, y, streamIndex, isAsync) {
-  if (decorGrains.length >= MAX_DECOR_GRAINS) return;
+// Generate a spectrogram column from audio data or procedural
+function generateSpecColumn(audioVals, time) {
+  const col = new Float32Array(SPEC_BINS);
 
-  const w = window.innerWidth;
-  const hue = 240 + Math.random() * 80; // indigo through violet to pink (240-320)
-  const width = 30 + Math.random() * 60;
-  const height = 8 + Math.random() * 16;
-  const freq = 1 + Math.random() * 4; // wave cycles inside envelope
-  const attackRatio = 0.2 + Math.random() * 0.5;
-  const maxLife = 120 + Math.random() * 200; // frames
-
-  decorGrains.push({
-    x: x,
-    y: y,
-    width: width,
-    height: height,
-    freq: freq,
-    hue: hue,
-    alpha: 0,
-    targetAlpha: 0.04 + Math.random() * 0.08,
-    vx: isAsync ? (Math.random() - 0.5) * 0.5 : (streamIndex >= 0 ? grainStreams[streamIndex].speed * grainStreams[streamIndex].direction : 0.2),
-    vy: isAsync ? (Math.random() - 0.5) * 0.3 : Math.sin(grainStreams[streamIndex >= 0 ? streamIndex : 0].phase) * 0.1,
-    phase: Math.random() * Math.PI * 2,
-    life: 0,
-    maxLife: maxLife,
-    attackRatio: attackRatio,
-    streamIndex: streamIndex,
-    isAsync: isAsync,
-    rotation: (Math.random() - 0.5) * 0.15
-  });
-}
-
-// Draw a single grain envelope with waveform inside
-function drawGrainEnvelope(g) {
-  const gc = grainGfxCtx;
-  const steps = Math.max(20, Math.floor(g.width / 2));
-
-  gc.save();
-  gc.translate(g.x, g.y);
-  gc.rotate(g.rotation);
-
-  // Life-based alpha: fade in, sustain, fade out
-  const lifeRatio = g.life / g.maxLife;
-  let lifeAlpha;
-  if (lifeRatio < 0.1) {
-    lifeAlpha = lifeRatio / 0.1;
-  } else if (lifeRatio > 0.7) {
-    lifeAlpha = (1 - lifeRatio) / 0.3;
+  if (playing && analyser && freqData) {
+    // Use real FFT data, downsampled to SPEC_BINS
+    analyser.getByteFrequencyData(freqData);
+    const binSize = Math.floor(freqData.length / SPEC_BINS);
+    for (let i = 0; i < SPEC_BINS; i++) {
+      let sum = 0;
+      for (let j = 0; j < binSize; j++) {
+        sum += freqData[i * binSize + j];
+      }
+      col[i] = (sum / binSize) / 255;
+      // Boost low and mid frequencies slightly for visual appeal
+      col[i] *= 1.0 + (1.0 - i / SPEC_BINS) * 0.3;
+    }
   } else {
-    lifeAlpha = 1;
-  }
-  const alpha = g.alpha * lifeAlpha;
+    // Procedural idle spectrogram: drifting harmonic bands + noise floor
+    for (let i = 0; i < SPEC_BINS; i++) {
+      const binNorm = i / SPEC_BINS;
+      // Noise floor
+      col[i] = Math.random() * 0.02;
 
-  if (alpha < 0.002) {
-    gc.restore();
-    return;
-  }
-
-  // Draw the bell-curve envelope outline
-  gc.beginPath();
-  // Top half of envelope
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const envVal = bellCurve(t, g.attackRatio);
-    const px = -g.width / 2 + t * g.width;
-    const py = -envVal * g.height;
-    if (i === 0) gc.moveTo(px, py);
-    else gc.lineTo(px, py);
-  }
-  // Bottom half (mirror)
-  for (let i = steps; i >= 0; i--) {
-    const t = i / steps;
-    const envVal = bellCurve(t, g.attackRatio);
-    const px = -g.width / 2 + t * g.width;
-    const py = envVal * g.height;
-    gc.lineTo(px, py);
-  }
-  gc.closePath();
-
-  // Fill with very subtle color
-  gc.fillStyle = `hsla(${g.hue}, 70%, 60%, ${alpha * 0.3})`;
-  gc.fill();
-
-  // Stroke the envelope outline
-  gc.strokeStyle = `hsla(${g.hue}, 80%, 70%, ${alpha * 0.6})`;
-  gc.lineWidth = 0.8;
-  gc.stroke();
-
-  // Draw waveform inside the envelope (clipped)
-  gc.save();
-  gc.clip();
-  gc.beginPath();
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const envVal = bellCurve(t, g.attackRatio);
-    const px = -g.width / 2 + t * g.width;
-    const waveY = Math.sin(t * g.freq * Math.PI * 2 + g.phase) * envVal * g.height * 0.7;
-    if (i === 0) gc.moveTo(px, waveY);
-    else gc.lineTo(px, waveY);
-  }
-  gc.strokeStyle = `hsla(${g.hue}, 90%, 75%, ${alpha * 0.8})`;
-  gc.lineWidth = 0.6;
-  gc.stroke();
-  gc.restore();
-
-  gc.restore();
-}
-
-// Draw faint horizontal stream lines
-function drawStreamLines(energy) {
-  const gc = grainGfxCtx;
-  const w = window.innerWidth;
-
-  for (let i = 0; i < grainStreams.length; i++) {
-    const s = grainStreams[i];
-    const baseAlpha = 0.015 + energy * 0.03;
-
-    gc.beginPath();
-    for (let x = 0; x <= w; x += 4) {
-      const t = x / w;
-      const waveOffset = Math.sin(t * 8 + s.phase + vizTime * s.speed * 0.5) * s.waviness;
-      const y = s.y + waveOffset;
-      if (x === 0) gc.moveTo(x, y);
-      else gc.lineTo(x, y);
+      // Harmonic bands
+      for (const h of idleHarmonics) {
+        const dist = Math.abs(binNorm - h.freq);
+        if (dist < h.bandwidth * 3) {
+          const gaussian = Math.exp(-(dist * dist) / (2 * h.bandwidth * h.bandwidth));
+          const wobbleAmt = Math.sin(time * 2 + h.phase) * h.wobble * 10;
+          col[i] += gaussian * h.intensity * (0.7 + 0.3 * Math.sin(time * 0.5 + h.phase + wobbleAmt));
+        }
+      }
     }
 
-    gc.strokeStyle = `hsla(${s.hue}, 50%, 55%, ${baseAlpha})`;
-    gc.lineWidth = 1;
-    gc.stroke();
-
-    // Draw dashes along the stream to suggest grain timing (quasi-synchronous)
-    const dashSpacing = 40 + 20 * Math.sin(vizTime * 0.3 + i);
-    const offset = (vizTime * s.speed * 30 * s.direction) % dashSpacing;
-    gc.beginPath();
-    for (let x = offset; x < w; x += dashSpacing) {
-      const t = x / w;
-      const waveOffset = Math.sin(t * 8 + s.phase + vizTime * s.speed * 0.5) * s.waviness;
-      const y = s.y + waveOffset;
-      gc.moveTo(x, y - 2);
-      gc.lineTo(x, y + 2);
+    // Update idle harmonics drift
+    for (const h of idleHarmonics) {
+      h.freq += h.drift + Math.sin(time * 0.3 + h.phase) * 0.0001;
+      if (h.freq < 0.02 || h.freq > 0.95) h.drift *= -1;
+      h.freq = Math.max(0.02, Math.min(0.95, h.freq));
     }
-    gc.strokeStyle = `hsla(${s.hue}, 60%, 65%, ${baseAlpha * 1.5})`;
-    gc.lineWidth = 1.5;
-    gc.stroke();
-
-    // Update stream phase
-    s.phase += 0.008 * s.speed;
   }
-}
 
-let grainSpawnTimer = 0;
+  return col;
+}
 
 function renderGrainGraphics(audioVals) {
   const gc = grainGfxCtx;
   const w = window.innerWidth;
   const h = window.innerHeight;
+  const time = vizTime;
 
-  // Clear the grain canvas completely (it overlays the WebGL viz)
   gc.clearRect(0, 0, w, h);
 
-  // Calculate audio energy
-  let energy = 0;
-  if (audioVals) {
-    energy = (audioVals[0] * 0.4 + audioVals[2] * 0.3 + audioVals[4] * 0.3);
+  // Generate and push new column
+  const newCol = generateSpecColumn(audioVals, time);
+  specColumns.push(newCol);
+  if (specColumns.length > specMaxColumns) specColumns.shift();
+
+  // Draw spectrogram scrolling from right to left
+  const colCount = specColumns.length;
+  const startX = w - colCount * specColumnWidth;
+
+  // Overall alpha for subtlety
+  gc.globalAlpha = 0.35;
+
+  for (let c = 0; c < colCount; c++) {
+    const col = specColumns[c];
+    const x = startX + c * specColumnWidth;
+    // Fade out columns near the left edge
+    const edgeFade = Math.min(1, (c / colCount) * 3);
+
+    for (let bin = 0; bin < SPEC_BINS; bin++) {
+      const intensity = col[bin] * edgeFade;
+      if (intensity < 0.03) continue;
+      const binNorm = bin / SPEC_BINS;
+      // Frequency axis: low at bottom, high at top
+      const y = h - (binNorm * h);
+      const binHeight = Math.ceil(h / SPEC_BINS) + 1;
+
+      gc.fillStyle = specColor(intensity, binNorm);
+      gc.fillRect(x, y - binHeight, specColumnWidth, binHeight);
+    }
   }
 
-  // Draw faint stream lines
-  drawStreamLines(energy);
-
-  // Spawn new grains
-  grainSpawnTimer++;
-  const spawnRate = playing ? (3 + energy * 8 + params.density * 0.1) : 1.5;
-  if (grainSpawnTimer % Math.max(1, Math.floor(6 / spawnRate)) === 0) {
-    // Spawn a stream-aligned grain (quasi-synchronous)
-    if (Math.random() < 0.6) {
-      const si = Math.floor(Math.random() * grainStreams.length);
-      const s = grainStreams[si];
-      const startX = s.direction > 0 ? -40 : w + 40;
-      const waveOffset = Math.sin(s.phase) * s.waviness;
-      spawnDecorGrain(startX, s.y + waveOffset + (Math.random() - 0.5) * 10, si, false);
-    }
-
-    // Spawn an asynchronous scattered grain
-    if (Math.random() < 0.4 + energy * 0.3) {
-      const ax = Math.random() * w;
-      const ay = Math.random() * h;
-      spawnDecorGrain(ax, ay, -1, true);
+  // Add soft horizontal glow lines at prominent frequencies (when playing)
+  if (playing && audioVals) {
+    const energy = (audioVals[0] * 0.4 + audioVals[2] * 0.3 + audioVals[4] * 0.3);
+    if (energy > 0.1) {
+      // Find peak bins
+      const lastCol = specColumns[specColumns.length - 1];
+      if (lastCol) {
+        for (let bin = 1; bin < SPEC_BINS - 1; bin++) {
+          if (lastCol[bin] > 0.4 && lastCol[bin] > lastCol[bin-1] && lastCol[bin] > lastCol[bin+1]) {
+            const binNorm = bin / SPEC_BINS;
+            const y = h - (binNorm * h);
+            const grad = gc.createLinearGradient(0, y, w, y);
+            const glowAlpha = lastCol[bin] * energy * 0.08;
+            grad.addColorStop(0, `rgba(139,92,246,0)`);
+            grad.addColorStop(0.3, `rgba(139,92,246,${glowAlpha})`);
+            grad.addColorStop(0.7, `rgba(236,72,153,${glowAlpha})`);
+            grad.addColorStop(1, `rgba(236,72,153,0)`);
+            gc.fillStyle = grad;
+            gc.fillRect(0, y - 2, w, 4);
+          }
+        }
+      }
     }
   }
 
-  // When playing, spawn extra grains reacting to audio
-  if (playing && energy > 0.1 && Math.random() < energy * 0.5) {
-    const ax = Math.random() * w;
-    const ay = Math.random() * h;
-    spawnDecorGrain(ax, ay, -1, true);
-  }
-
-  // Update and draw all decoration grains
-  for (let i = decorGrains.length - 1; i >= 0; i--) {
-    const g = decorGrains[i];
-
-    // Update position
-    g.x += g.vx;
-    if (!g.isAsync && g.streamIndex >= 0) {
-      const s = grainStreams[g.streamIndex];
-      const t = g.x / w;
-      g.vy = Math.cos(t * 8 + s.phase + vizTime * s.speed * 0.5) * s.waviness * 0.02 * s.speed;
-    }
-    g.y += g.vy;
-
-    // Update phase for waveform animation
-    g.phase += 0.02 + energy * 0.05;
-
-    // Fade alpha toward target
-    g.alpha += (g.targetAlpha - g.alpha) * 0.05;
-
-    // Audio reactivity: pulse grain size slightly
-    if (playing && energy > 0) {
-      const pulse = 1 + energy * 0.15;
-      g.width *= (1 + (pulse - 1) * 0.02);
-      g.height *= (1 + (pulse - 1) * 0.02);
-      // Clamp to prevent runaway growth
-      g.width = Math.min(g.width, 150);
-      g.height = Math.min(g.height, 30);
-    }
-
-    // Advance life
-    g.life++;
-
-    // Remove dead grains or out of bounds
-    if (g.life > g.maxLife || g.x < -100 || g.x > w + 100 || g.y < -100 || g.y > h + 100) {
-      decorGrains.splice(i, 1);
-      continue;
-    }
-
-    drawGrainEnvelope(g);
-  }
+  gc.globalAlpha = 1.0;
 }
 
 </script>

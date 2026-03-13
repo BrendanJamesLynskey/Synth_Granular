@@ -1222,13 +1222,17 @@ if (gl) {
 startViz();
 
 
-// ===== SPARSE PARTICLE GRAPHICS LAYER =====
+// ===== SWARMING PARTICLE GRAPHICS LAYER =====
 
 const grainGfxCanvas = document.getElementById('grainCanvas');
 const grainGfxCtx = grainGfxCanvas.getContext('2d');
 
-const sparseParticles = [];
-const PARTICLE_COUNT = 60 + Math.floor(Math.random() * 50);
+const swarmParticles = [];
+const PARTICLE_COUNT = 200;
+
+// Attractor points that slowly wander — particles clump around these
+const attractors = [];
+const NUM_ATTRACTORS = 5;
 
 function resizeGrainCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -1237,27 +1241,43 @@ function resizeGrainCanvas() {
   grainGfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function initParticles() {
-  sparseParticles.length = 0;
+function initSwarm() {
+  swarmParticles.length = 0;
+  attractors.length = 0;
   const w = window.innerWidth;
   const h = window.innerHeight;
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    sparseParticles.push({
+
+  for (let i = 0; i < NUM_ATTRACTORS; i++) {
+    attractors.push({
       x: Math.random() * w,
       y: Math.random() * h,
-      vx: (Math.random() - 0.5) * 0.3,
-      vy: (Math.random() - 0.5) * 0.3,
-      r: 0.5 + Math.random() * 2.5,
+      vx: (Math.random() - 0.5) * 0.8,
+      vy: (Math.random() - 0.5) * 0.8,
+      strength: 0.3 + Math.random() * 0.7,
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    swarmParticles.push({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 2,
+      vy: (Math.random() - 0.5) * 2,
+      r: 0.8 + Math.random() * 2,
       hue: 240 + Math.random() * 80,
-      alpha: 0.15 + Math.random() * 0.5,
+      alpha: 0.3 + Math.random() * 0.6,
       pulse: Math.random() * Math.PI * 2,
+      erratic: 0.5 + Math.random() * 1.5,
+      attractor: Math.floor(Math.random() * NUM_ATTRACTORS),
+      switchTimer: Math.random() * 300,
     });
   }
 }
 
-window.addEventListener('resize', () => { resizeGrainCanvas(); initParticles(); });
+window.addEventListener('resize', () => { resizeGrainCanvas(); initSwarm(); });
 resizeGrainCanvas();
-initParticles();
+initSwarm();
 
 function renderGrainGraphics(audioVals) {
   const gc = grainGfxCtx;
@@ -1267,14 +1287,81 @@ function renderGrainGraphics(audioVals) {
 
   gc.clearRect(0, 0, w, h);
 
-  for (const p of sparseParticles) {
-    p.x += p.vx + Math.sin(t * 0.2 + p.pulse) * 0.08;
-    p.y += p.vy + Math.cos(t * 0.15 + p.pulse) * 0.08;
-    if (p.x < -10) p.x = w + 10;
-    if (p.x > w + 10) p.x = -10;
-    if (p.y < -10) p.y = h + 10;
-    if (p.y > h + 10) p.y = -10;
-    const a = p.alpha * (0.6 + 0.4 * Math.sin(t * 0.5 + p.pulse));
+  // Update attractors — slow wandering with occasional direction changes
+  for (const a of attractors) {
+    a.vx += (Math.random() - 0.5) * 0.1;
+    a.vy += (Math.random() - 0.5) * 0.1;
+    // Dampen
+    a.vx *= 0.98;
+    a.vy *= 0.98;
+    // Occasional jolt
+    if (Math.random() < 0.005) {
+      a.vx += (Math.random() - 0.5) * 3;
+      a.vy += (Math.random() - 0.5) * 3;
+    }
+    a.x += a.vx;
+    a.y += a.vy;
+    // Soft boundary — steer back toward center region
+    const margin = 100;
+    if (a.x < margin) a.vx += 0.2;
+    if (a.x > w - margin) a.vx -= 0.2;
+    if (a.y < margin) a.vy += 0.2;
+    if (a.y > h - margin) a.vy -= 0.2;
+    // Oscillate strength
+    a.strength = 0.3 + 0.4 * (0.5 + 0.5 * Math.sin(t * 0.3 + a.phase));
+  }
+
+  // Update and draw particles
+  for (const p of swarmParticles) {
+    // Occasionally switch attractor (leave/join clumps)
+    p.switchTimer--;
+    if (p.switchTimer <= 0) {
+      p.attractor = Math.floor(Math.random() * NUM_ATTRACTORS);
+      p.switchTimer = 100 + Math.random() * 400;
+      // Burst of speed when switching
+      p.vx += (Math.random() - 0.5) * 3;
+      p.vy += (Math.random() - 0.5) * 3;
+    }
+
+    // Attraction toward current attractor
+    const att = attractors[p.attractor];
+    const dx = att.x - p.x;
+    const dy = att.y - p.y;
+    const dist = Math.sqrt(dx * dx + dy * dy) + 1;
+    const force = att.strength * 0.02;
+    p.vx += (dx / dist) * force;
+    p.vy += (dy / dist) * force;
+
+    // Erratic jitter — insect-like
+    p.vx += (Math.random() - 0.5) * p.erratic * 0.6;
+    p.vy += (Math.random() - 0.5) * p.erratic * 0.6;
+
+    // Occasional sharp direction change
+    if (Math.random() < 0.01) {
+      p.vx += (Math.random() - 0.5) * 4;
+      p.vy += (Math.random() - 0.5) * 4;
+    }
+
+    // Speed limit and drag
+    const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+    if (speed > 4) {
+      p.vx = (p.vx / speed) * 4;
+      p.vy = (p.vy / speed) * 4;
+    }
+    p.vx *= 0.96;
+    p.vy *= 0.96;
+
+    p.x += p.vx;
+    p.y += p.vy;
+
+    // Wrap around edges
+    if (p.x < -20) p.x = w + 20;
+    if (p.x > w + 20) p.x = -20;
+    if (p.y < -20) p.y = h + 20;
+    if (p.y > h + 20) p.y = -20;
+
+    // Draw
+    const a = p.alpha * (0.5 + 0.5 * Math.sin(t * 0.8 + p.pulse));
     gc.beginPath();
     gc.arc(p.x, p.y, p.r, 0, Math.PI * 2);
     gc.fillStyle = `hsla(${p.hue}, 70%, 65%, ${a})`;

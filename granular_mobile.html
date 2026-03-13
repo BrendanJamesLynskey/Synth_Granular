@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Granular Synth">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050510">
+<title>Granular Synth - Mobile</title>
+<style>
+:root {
+  --bg: #050510;
+  --accent-1: #6366f1;
+  --accent-2: #8b5cf6;
+  --accent-3: #ec4899;
+  --accent-4: #06b6d4;
+  --surface: rgba(255,255,255,0.04);
+  --surface-hover: rgba(255,255,255,0.08);
+  --border: rgba(255,255,255,0.08);
+  --text: #e2e8f0;
+  --text-dim: rgba(255,255,255,0.45);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Helvetica Neue', sans-serif;
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#vizCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 0;
+}
+
+#grainCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+#uiOverlay {
+  position: relative;
+  z-index: 2;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--safe-top) + 16px) calc(var(--safe-left) + 16px) calc(var(--safe-bottom) + 80px) calc(var(--safe-right) + 16px);
+  max-width: 400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.title-section {
+  text-align: center;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.title-section h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2), var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 2px;
+}
+
+.title-section .subtitle {
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Play Button */
+.play-section {
+  margin-bottom: 20px;
+}
+
+#playBtn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-1);
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-1);
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: all 0.2s ease;
+  min-height: 60px;
+  min-width: 60px;
+}
+
+#playBtn.active {
+  background: var(--accent-1);
+  color: #fff;
+  box-shadow: 0 0 30px rgba(99, 102, 241, 0.4);
+}
+
+#playBtn:active {
+  transform: scale(0.95);
+}
+
+/* Source Selection */
+.source-section {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.source-section label {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.source-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+
+.source-scroll::-webkit-scrollbar { display: none; }
+
+.source-btn {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-family: inherit;
+  letter-spacing: 1px;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.source-btn.active {
+  border-color: var(--accent-1);
+  color: var(--accent-1);
+  background: rgba(99, 102, 241, 0.12);
+}
+
+/* Collapsible Panels */
+.panel {
+  width: 100%;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(5, 5, 16, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-height: 48px;
+}
+
+.panel-header h2 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.panel-arrow {
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: transform 0.3s ease;
+}
+
+.panel.expanded .panel-arrow {
+  transform: rotate(180deg);
+}
+
+.panel-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease;
+}
+
+.panel.expanded .panel-content {
+  max-height: 800px;
+}
+
+.panel-inner {
+  padding: 4px 16px 16px 16px;
+}
+
+/* Sliders */
+.slider-group {
+  margin-bottom: 14px;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.slider-label span {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+.slider-label .slider-val {
+  font-size: 11px;
+  color: var(--accent-4);
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 32px;
+  background: transparent;
+  touch-action: manipulation;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-1);
+  border: 2px solid rgba(255,255,255,0.2);
+  margin-top: -10px;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  border: none;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--accent-1);
+  border: 2px solid rgba(255,255,255,0.2);
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.3);
+}
+
+/* Presets */
+.preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.preset-btn {
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  letter-spacing: 1px;
+  cursor: pointer;
+  touch-action: manipulation;
+  min-height: 48px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.preset-btn:active {
+  background: var(--surface-hover);
+  border-color: var(--accent-2);
+}
+
+.preset-btn .preset-icon {
+  font-size: 18px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.preset-btn .preset-name {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* Status Bar */
+#statusBar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 16px calc(var(--safe-bottom) + 8px) 16px;
+  background: rgba(5, 5, 16, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  z-index: 3;
+}
+
+#statusBar .status-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#statusBar .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-1);
+  opacity: 0.5;
+}
+
+#statusBar .status-dot.active {
+  opacity: 1;
+  box-shadow: 0 0 8px var(--accent-1);
+}
+</style>
+</head>
+<body>
+
+<canvas id="vizCanvas"></canvas>
+<canvas id="grainCanvas"></canvas>
+
+<div id="uiOverlay">
+  <div class="title-section">
+    <h1>GRANULAR SYNTH</h1>
+    <div class="subtitle">texture engine</div>
+  </div>
+
+  <div class="play-section">
+    <button id="playBtn" onclick="togglePlay()">&#9654;</button>
+  </div>
+
+  <div class="source-section">
+    <label>Source</label>
+    <div class="source-scroll">
+      <button class="source-btn active" data-src="harmonic" onclick="setSource('harmonic')">Harmonic</button>
+      <button class="source-btn" data-src="noise" onclick="setSource('noise')">Noise</button>
+      <button class="source-btn" data-src="formant" onclick="setSource('formant')">Formant</button>
+      <button class="source-btn" data-src="fm" onclick="setSource('fm')">FM</button>
+      <button class="source-btn" data-src="choir" onclick="setSource('choir')">Choir</button>
+      <button class="source-btn" data-src="metallic" onclick="setSource('metallic')">Metallic</button>
+    </div>
+  </div>
+
+  <!-- Grain Parameters Panel -->
+  <div class="panel expanded" id="panelGrain">
+    <div class="panel-header" onclick="togglePanel('panelGrain')">
+      <h2>Grain Parameters</h2>
+      <span class="panel-arrow">&#9660;</span>
+    </div>
+    <div class="panel-content">
+      <div class="panel-inner">
+        <div class="slider-group">
+          <div class="slider-label"><span>Density</span><span class="slider-val" id="val_density">20</span></div>
+          <input type="range" min="1" max="80" value="20" oninput="updateParam('density',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Grain Size</span><span class="slider-val" id="val_size">80</span></div>
+          <input type="range" min="10" max="500" value="80" oninput="updateParam('size',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Pitch</span><span class="slider-val" id="val_pitch">220</span></div>
+          <input type="range" min="20" max="2000" value="220" oninput="updateParam('pitch',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Spread</span><span class="slider-val" id="val_spread">30</span></div>
+          <input type="range" min="0" max="100" value="30" oninput="updateParam('spread',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Shimmer</span><span class="slider-val" id="val_shimmer">20</span></div>
+          <input type="range" min="0" max="100" value="20" oninput="updateParam('shimmer',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Wander</span><span class="slider-val" id="val_wander">50</span></div>
+          <input type="range" min="0" max="100" value="50" oninput="updateParam('wander',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Harmonics</span><span class="slider-val" id="val_harmonics">4</span></div>
+          <input type="range" min="1" max="16" value="4" oninput="updateParam('harmonics',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Stereo Width</span><span class="slider-val" id="val_stereo">70</span></div>
+          <input type="range" min="0" max="100" value="70" oninput="updateParam('stereo',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Filter</span><span class="slider-val" id="val_filter">2000</span></div>
+          <input type="range" min="100" max="15000" value="2000" oninput="updateParam('filter',this.value)">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Envelope & Space Panel -->
+  <div class="panel" id="panelEnvelope">
+    <div class="panel-header" onclick="togglePanel('panelEnvelope')">
+      <h2>Envelope &amp; Space</h2>
+      <span class="panel-arrow">&#9660;</span>
+    </div>
+    <div class="panel-content">
+      <div class="panel-inner">
+        <div class="slider-group">
+          <div class="slider-label"><span>Attack Shape</span><span class="slider-val" id="val_attack">40</span></div>
+          <input type="range" min="1" max="99" value="40" oninput="updateParam('attack',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Reverb</span><span class="slider-val" id="val_reverb">60</span></div>
+          <input type="range" min="0" max="100" value="60" oninput="updateParam('reverb',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Delay</span><span class="slider-val" id="val_delay">30</span></div>
+          <input type="range" min="0" max="100" value="30" oninput="updateParam('delay',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Volume</span><span class="slider-val" id="val_volume">70</span></div>
+          <input type="range" min="0" max="100" value="70" oninput="updateParam('volume',this.value)">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Presets Panel -->
+  <div class="panel" id="panelPresets">
+    <div class="panel-header" onclick="togglePanel('panelPresets')">
+      <h2>Presets</h2>
+      <span class="panel-arrow">&#9660;</span>
+    </div>
+    <div class="panel-content">
+      <div class="panel-inner">
+        <div class="preset-grid">
+          <button class="preset-btn" onclick="loadPreset('celestial')"><span class="preset-icon">&#10024;</span><span class="preset-name">Celestial</span></button>
+          <button class="preset-btn" onclick="loadPreset('rainfall')"><span class="preset-icon">&#127782;</span><span class="preset-name">Rainfall</span></button>
+          <button class="preset-btn" onclick="loadPreset('swarm')"><span class="preset-icon">&#127744;</span><span class="preset-name">Swarm</span></button>
+          <button class="preset-btn" onclick="loadPreset('deepspace')"><span class="preset-icon">&#127756;</span><span class="preset-name">Deep Space</span></button>
+          <button class="preset-btn" onclick="loadPreset('crystals')"><span class="preset-icon">&#128142;</span><span class="preset-name">Crystals</span></button>
+          <button class="preset-btn" onclick="loadPreset('aurora')"><span class="preset-icon">&#127752;</span><span class="preset-name">Aurora</span></button>
+          <button class="preset-btn" onclick="loadPreset('whispers')"><span class="preset-icon">&#128172;</span><span class="preset-name">Whispers</span></button>
+          <button class="preset-btn" onclick="loadPreset('tectonic')"><span class="preset-icon">&#127755;</span><span class="preset-name">Tectonic</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evolution Panel -->
+  <div class="panel" id="panelEvolution">
+    <div class="panel-header" onclick="togglePanel('panelEvolution')">
+      <h2>Evolution</h2>
+      <span class="panel-arrow">&#9660;</span>
+    </div>
+    <div class="panel-content">
+      <div class="panel-inner">
+        <div class="slider-group">
+          <div class="slider-label"><span>Evo Rate</span><span class="slider-val" id="val_evoRate">30</span></div>
+          <input type="range" min="0" max="100" value="30" oninput="updateParam('evoRate',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Evo Depth</span><span class="slider-val" id="val_evoDepth">50</span></div>
+          <input type="range" min="0" max="100" value="50" oninput="updateParam('evoDepth',this.value)">
+        </div>
+        <div class="slider-group">
+          <div class="slider-label"><span>Chaos</span><span class="slider-val" id="val_chaos">20</span></div>
+          <input type="range" min="0" max="100" value="20" oninput="updateParam('chaos',this.value)">
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="statusBar">
+  <div class="status-item">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Ready</span>
+  </div>
+  <div class="status-item">
+    <span id="grainCount">Grains: 0</span>
+  </div>
+  <div class="status-item">
+    <span id="sourceLabel">harmonic</span>
+  </div>
+</div>
+
+<script>
+// ==================== AUDIO ENGINE ====================
+
+let ctx, masterGain, reverbNode, reverbGain, dryGain, delayNode, delayGain, feedbackGain;
+let filterNode, analyser, analyserData, freqData;
+let playing = false;
+let grainInterval = null;
+let activeGrains = 0;
+let grainId = 0;
+let evolutionPhase = 0;
+let wanderPhases = [0, 0, 0, 0];
+
+const params = {
+  source: 'harmonic',
+  density: 20, size: 80, pitch: 220, spread: 0.3,
+  shimmer: 0.2, wander: 0.5, attack: 0.4, reverb: 0.6,
+  delay: 0.3, filter: 2000, stereo: 0.7, volume: 0.7,
+  evoRate: 0.3, evoDepth: 0.5, chaos: 0.2, harmonics: 4
+};
+
+function initAudio() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = ctx.createGain();
+  masterGain.gain.value = params.volume;
+  filterNode = ctx.createBiquadFilter();
+  filterNode.type = 'lowpass';
+  filterNode.frequency.value = params.filter;
+  filterNode.Q.value = 1.5;
+  reverbNode = ctx.createConvolver();
+  reverbNode.buffer = createReverbIR(3.5, 0.7);
+  reverbGain = ctx.createGain();
+  reverbGain.gain.value = params.reverb;
+  dryGain = ctx.createGain();
+  dryGain.gain.value = 1 - params.reverb * 0.4;
+  delayNode = ctx.createDelay(2.0);
+  delayNode.delayTime.value = 0.37;
+  delayGain = ctx.createGain();
+  delayGain.gain.value = params.delay;
+  feedbackGain = ctx.createGain();
+  feedbackGain.gain.value = 0.45;
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyserData = new Uint8Array(analyser.frequencyBinCount);
+  freqData = new Uint8Array(analyser.frequencyBinCount);
+  filterNode.connect(dryGain);
+  filterNode.connect(reverbNode);
+  reverbNode.connect(reverbGain);
+  filterNode.connect(delayNode);
+  delayNode.connect(delayGain);
+  delayNode.connect(feedbackGain);
+  feedbackGain.connect(delayNode);
+  dryGain.connect(masterGain);
+  reverbGain.connect(masterGain);
+  delayGain.connect(masterGain);
+  masterGain.connect(analyser);
+  analyser.connect(ctx.destination);
+}
+
+function createReverbIR(duration, decay) {
+  const len = ctx.sampleRate * duration;
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const t = i / ctx.sampleRate;
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay * 2);
+      if (i < ctx.sampleRate * 0.08) {
+        data[i] += (Math.random() * 2 - 1) * 0.3 * Math.pow(1 - i / (ctx.sampleRate * 0.08), 3);
+      }
+    }
+  }
+  return buf;
+}
+
+function getEvolvingPitch() {
+  const t = ctx.currentTime;
+  const rate = params.evoRate * 0.5;
+  const depth = params.evoDepth;
+  let pitch = params.pitch;
+  const w1 = Math.sin(t * rate * 0.13) * depth * 0.15;
+  const w2 = Math.sin(t * rate * 0.07 + 1.3) * depth * 0.08;
+  const w3 = Math.sin(t * rate * 0.31 + 2.7) * depth * 0.05;
+  pitch *= (1 + w1 + w2 + w3);
+  const spreadAmt = params.spread;
+  pitch *= (1 + (Math.random() * 2 - 1) * spreadAmt * 0.5);
+  if (Math.random() < params.chaos * 0.1) {
+    const intervals = [0.5, 0.667, 0.75, 1.333, 1.5, 2.0, 0.25, 3.0];
+    pitch *= intervals[Math.floor(Math.random() * intervals.length)];
+  }
+  return pitch;
+}
+
+function createGrain() {
+  if (!ctx || !playing) return;
+  const now = ctx.currentTime;
+  const dur = params.size / 1000;
+  const pitch = getEvolvingPitch();
+  const attackRatio = params.attack;
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(0.3, now + dur * attackRatio);
+  env.gain.linearRampToValueAtTime(0, now + dur);
+  let panner = null;
+  if (ctx.createStereoPanner) {
+    panner = ctx.createStereoPanner();
+    panner.pan.value = (Math.random() * 2 - 1) * params.stereo;
+  }
+  const dest = panner || env;
+  if (panner) env.connect(panner);
+  (panner || env).connect(filterNode);
+  switch (params.source) {
+    case 'harmonic': createHarmonicGrain(env, pitch, now, dur); break;
+    case 'noise': createNoiseGrain(env, pitch, now, dur); break;
+    case 'formant': createFormantGrain(env, pitch, now, dur); break;
+    case 'fm': createFMGrain(env, pitch, now, dur); break;
+    case 'choir': createChoirGrain(env, pitch, now, dur); break;
+    case 'metallic': createMetallicGrain(env, pitch, now, dur); break;
+  }
+  activeGrains++;
+  grainId++;
+  setTimeout(() => { activeGrains = Math.max(0, activeGrains - 1); }, dur * 1000 + 50);
+}
+
+function createHarmonicGrain(env, pitch, now, dur) {
+  const numH = params.harmonics;
+  for (let h = 1; h <= numH; h++) {
+    const osc = ctx.createOscillator();
+    const hGain = ctx.createGain();
+    const t = now * params.evoRate;
+    const amp = (1 / (h * (1 + Math.sin(t + h) * 0.3 * params.evoDepth))) * 0.15;
+    hGain.gain.value = amp;
+    osc.type = h % 2 === 0 ? 'sine' : (Math.random() > 0.7 ? 'triangle' : 'sine');
+    osc.frequency.value = pitch * h;
+    if (params.shimmer > 0) {
+      osc.detune.setValueAtTime((Math.random() * 2 - 1) * params.shimmer * 40, now);
+      osc.detune.linearRampToValueAtTime((Math.random() * 2 - 1) * params.shimmer * 40, now + dur);
+    }
+    osc.connect(hGain);
+    hGain.connect(env);
+    osc.start(now);
+    osc.stop(now + dur + 0.01);
+  }
+}
+
+function createNoiseGrain(env, pitch, now, dur) {
+  const bufSize = Math.ceil(ctx.sampleRate * dur);
+  const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  const phaseInc = pitch / ctx.sampleRate * Math.PI * 2;
+  let phase = Math.random() * Math.PI * 2;
+  for (let i = 0; i < bufSize; i++) {
+    const noise = Math.random() * 2 - 1;
+    phase += phaseInc * (1 + noise * params.shimmer * 0.5);
+    data[i] = (noise * 0.3 + Math.sin(phase) * 0.7) * 0.2;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(env);
+  src.start(now);
+}
+
+function createFormantGrain(env, pitch, now, dur) {
+  const vowels = [
+    [800, 1150, 2900], [350, 2000, 2800], [270, 2140, 2950],
+    [450, 800, 2830], [325, 700, 2530],
+  ];
+  const t = ctx.currentTime * params.evoRate * 0.2;
+  const vi = Math.floor((Math.sin(t) * 0.5 + 0.5) * vowels.length) % vowels.length;
+  const formants = vowels[vi];
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.value = pitch;
+  const formantGains = formants.map((freq, i) => {
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = freq;
+    bp.Q.value = 8 + i * 4;
+    const g = ctx.createGain();
+    g.gain.value = 0.12 / (i + 1);
+    osc.connect(bp);
+    bp.connect(g);
+    g.connect(env);
+    return g;
+  });
+  osc.start(now);
+  osc.stop(now + dur + 0.01);
+}
+
+function createFMGrain(env, pitch, now, dur) {
+  const modRatio = [1, 1.5, 2, 3, 0.5, 1.414][Math.floor(Math.random() * 6)];
+  const modDepth = pitch * (0.5 + Math.random() * params.shimmer * 4);
+  const mod = ctx.createOscillator();
+  const modGain = ctx.createGain();
+  const carrier = ctx.createOscillator();
+  const cGain = ctx.createGain();
+  mod.frequency.value = pitch * modRatio;
+  modGain.gain.value = modDepth;
+  carrier.frequency.value = pitch;
+  cGain.gain.value = 0.15;
+  modGain.gain.setValueAtTime(modDepth * 0.2, now);
+  modGain.gain.linearRampToValueAtTime(modDepth, now + dur * 0.4);
+  modGain.gain.linearRampToValueAtTime(modDepth * 0.1, now + dur);
+  mod.connect(modGain);
+  modGain.connect(carrier.frequency);
+  carrier.connect(cGain);
+  cGain.connect(env);
+  mod.start(now);
+  carrier.start(now);
+  mod.stop(now + dur + 0.01);
+  carrier.stop(now + dur + 0.01);
+}
+
+function createChoirGrain(env, pitch, now, dur) {
+  const voices = 3 + Math.floor(Math.random() * 3);
+  for (let v = 0; v < voices; v++) {
+    const osc = ctx.createOscillator();
+    const vGain = ctx.createGain();
+    osc.type = Math.random() > 0.5 ? 'sine' : 'triangle';
+    const detune = (Math.random() * 2 - 1) * 15 + Math.sin(now * 0.7 + v) * 8;
+    osc.frequency.value = pitch;
+    osc.detune.value = detune;
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 4.5 + Math.random() * 2;
+    lfoGain.gain.value = 5 + params.shimmer * 10;
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc.detune);
+    vGain.gain.value = 0.08 / voices;
+    osc.connect(vGain);
+    vGain.connect(env);
+    osc.start(now + Math.random() * 0.01);
+    lfo.start(now);
+    osc.stop(now + dur + 0.01);
+    lfo.stop(now + dur + 0.01);
+  }
+}
+
+function createMetallicGrain(env, pitch, now, dur) {
+  const ratios = [1, 1.414, 1.732, 2.236, 2.646, 3.162];
+  const numPartials = Math.min(params.harmonics, 6);
+  for (let i = 0; i < numPartials; i++) {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = pitch * ratios[i % ratios.length] * (1 + Math.random() * 0.02);
+    g.gain.value = 0.1 / (i + 1);
+    g.gain.setValueAtTime(0.1 / (i + 1), now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + dur * (1 - i * 0.1));
+    osc.connect(g);
+    g.connect(env);
+    osc.start(now);
+    osc.stop(now + dur + 0.01);
+  }
+}
+
+function startGrainScheduler() {
+  if (grainInterval) clearInterval(grainInterval);
+  scheduleGrains();
+}
+
+function scheduleGrains() {
+  if (!playing) return;
+  const intervalMs = 1000 / params.density;
+  const jitter = (Math.random() * 0.5 + 0.75);
+  createGrain();
+  grainInterval = setTimeout(scheduleGrains, intervalMs * jitter);
+}
+
+function stopGrainScheduler() {
+  if (grainInterval) { clearTimeout(grainInterval); grainInterval = null; }
+}
+
+let evolutionTimer = null;
+
+function startEvolution() {
+  if (evolutionTimer) clearInterval(evolutionTimer);
+  evolutionTimer = setInterval(() => {
+    if (!playing) return;
+    evolutionPhase += 0.01;
+    const filterBase = params.filter;
+    const filterMod = Math.sin(evolutionPhase * params.evoRate * 2) * params.evoDepth * filterBase * 0.3;
+    if (filterNode) filterNode.frequency.value = Math.max(100, filterBase + filterMod);
+    const revMod = Math.sin(evolutionPhase * params.evoRate * 0.7 + 1) * params.evoDepth * 0.15;
+    if (reverbGain) reverbGain.gain.value = Math.max(0, Math.min(1, params.reverb + revMod));
+    if (delayNode) {
+      const delMod = Math.sin(evolutionPhase * params.evoRate * 0.3 + 2.5) * params.evoDepth * 0.08;
+      delayNode.delayTime.value = 0.37 + delMod;
+    }
+    for (let i = 0; i < wanderPhases.length; i++) {
+      wanderPhases[i] += 0.003 * (i + 1) * params.wander;
+    }
+  }, 50);
+}
+
+function stopEvolution() {
+  if (evolutionTimer) { clearInterval(evolutionTimer); evolutionTimer = null; }
+}
+
+const presets = {
+  celestial: { source:'harmonic', density:12, size:300, pitch:330, spread:20, shimmer:60, wander:80, attack:70, reverb:85, delay:40, filter:6000, stereo:90, volume:70, evoRate:20, evoDepth:70, chaos:5, harmonics:8 },
+  rainfall: { source:'noise', density:60, size:30, pitch:800, spread:80, shimmer:10, wander:30, attack:20, reverb:50, delay:15, filter:8000, stereo:95, volume:55, evoRate:40, evoDepth:30, chaos:10, harmonics:2 },
+  swarm: { source:'fm', density:45, size:50, pitch:440, spread:60, shimmer:40, wander:60, attack:15, reverb:30, delay:20, filter:5000, stereo:80, volume:50, evoRate:60, evoDepth:50, chaos:40, harmonics:3 },
+  deepspace: { source:'harmonic', density:5, size:500, pitch:55, spread:10, shimmer:80, wander:90, attack:80, reverb:95, delay:60, filter:1500, stereo:70, volume:80, evoRate:10, evoDepth:80, chaos:8, harmonics:12 },
+  crystals: { source:'metallic', density:15, size:120, pitch:1200, spread:40, shimmer:70, wander:20, attack:10, reverb:70, delay:50, filter:10000, stereo:60, volume:50, evoRate:30, evoDepth:40, chaos:15, harmonics:6 },
+  aurora: { source:'choir', density:8, size:400, pitch:185, spread:15, shimmer:50, wander:70, attack:85, reverb:90, delay:35, filter:3500, stereo:85, volume:75, evoRate:15, evoDepth:60, chaos:3, harmonics:6 },
+  whispers: { source:'formant', density:10, size:200, pitch:150, spread:25, shimmer:30, wander:40, attack:60, reverb:75, delay:45, filter:2500, stereo:50, volume:45, evoRate:25, evoDepth:55, chaos:5, harmonics:4 },
+  tectonic: { source:'fm', density:3, size:450, pitch:35, spread:5, shimmer:90, wander:95, attack:90, reverb:80, delay:55, filter:800, stereo:40, volume:85, evoRate:8, evoDepth:90, chaos:20, harmonics:10 },
+};
+
+// ==================== UI FUNCTIONS ====================
+
+function togglePlay() {
+  if (!ctx) initAudio();
+  if (ctx.state === 'suspended') ctx.resume();
+  playing = !playing;
+  const btn = document.getElementById('playBtn');
+  const dot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  if (playing) {
+    btn.classList.add('active');
+    btn.innerHTML = '&#9646;&#9646;';
+    dot.classList.add('active');
+    statusText.textContent = 'Playing';
+    startGrainScheduler();
+    startEvolution();
+    startViz();
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = '&#9654;';
+    dot.classList.remove('active');
+    statusText.textContent = 'Stopped';
+    stopGrainScheduler();
+    stopEvolution();
+  }
+}
+
+function updateParam(name, value) {
+  const v = parseFloat(value);
+  const valEl = document.getElementById('val_' + name);
+  // Map slider values to param ranges
+  switch (name) {
+    case 'density': params.density = v; if (valEl) valEl.textContent = v; break;
+    case 'size': params.size = v; if (valEl) valEl.textContent = v; break;
+    case 'pitch': params.pitch = v; if (valEl) valEl.textContent = v; break;
+    case 'spread': params.spread = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'shimmer': params.shimmer = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'wander': params.wander = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'attack': params.attack = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'reverb':
+      params.reverb = v / 100;
+      if (reverbGain) reverbGain.gain.value = params.reverb;
+      if (dryGain) dryGain.gain.value = 1 - params.reverb * 0.4;
+      if (valEl) valEl.textContent = v;
+      break;
+    case 'delay':
+      params.delay = v / 100;
+      if (delayGain) delayGain.gain.value = params.delay;
+      if (valEl) valEl.textContent = v;
+      break;
+    case 'filter':
+      params.filter = v;
+      if (filterNode) filterNode.frequency.value = v;
+      if (valEl) valEl.textContent = v;
+      break;
+    case 'stereo': params.stereo = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'volume':
+      params.volume = v / 100;
+      if (masterGain) masterGain.gain.value = params.volume;
+      if (valEl) valEl.textContent = v;
+      break;
+    case 'evoRate': params.evoRate = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'evoDepth': params.evoDepth = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'chaos': params.chaos = v / 100; if (valEl) valEl.textContent = v; break;
+    case 'harmonics': params.harmonics = v; if (valEl) valEl.textContent = v; break;
+  }
+}
+
+function setSource(src) {
+  params.source = src;
+  document.querySelectorAll('.source-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.src === src);
+  });
+  document.getElementById('sourceLabel').textContent = src;
+}
+
+function loadPreset(name) {
+  const p = presets[name];
+  if (!p) return;
+  setSource(p.source);
+  // Map preset values (0-100 scale) back into params and UI
+  const mappings = [
+    ['density', p.density, 1, 80],
+    ['size', p.size, 10, 500],
+    ['pitch', p.pitch, 20, 2000],
+    ['spread', p.spread, 0, 100],
+    ['shimmer', p.shimmer, 0, 100],
+    ['wander', p.wander, 0, 100],
+    ['attack', p.attack, 1, 99],
+    ['reverb', p.reverb, 0, 100],
+    ['delay', p.delay, 0, 100],
+    ['filter', p.filter, 100, 15000],
+    ['stereo', p.stereo, 0, 100],
+    ['volume', p.volume, 0, 100],
+    ['evoRate', p.evoRate, 0, 100],
+    ['evoDepth', p.evoDepth, 0, 100],
+    ['chaos', p.chaos, 0, 100],
+    ['harmonics', p.harmonics, 1, 16],
+  ];
+  mappings.forEach(([name, val, min, max]) => {
+    // For presets, the values need to be set as slider values
+    updateParam(name, val);
+    // Update the slider position
+    const sliders = document.querySelectorAll('input[type="range"]');
+    sliders.forEach(s => {
+      const handler = s.getAttribute('oninput');
+      if (handler && handler.includes("'" + name + "'")) {
+        s.value = val;
+      }
+    });
+  });
+}
+
+function togglePanel(id) {
+  const panel = document.getElementById(id);
+  panel.classList.toggle('expanded');
+}
+
+// ==================== VISUALIZATION ====================
+
+let vizCanvas, vizCtx2d, vizGl, vizProgram, vizStartTime;
+let grainCanvasEl, grainCtx;
+let useWebGL = false;
+let vizAnimId = null;
+
+// Grain decoration particles
+const grainParticles = [];
+const MAX_GRAIN_PARTICLES = 25;
+
+function initViz() {
+  vizCanvas = document.getElementById('vizCanvas');
+  grainCanvasEl = document.getElementById('grainCanvas');
+  resizeCanvases();
+  window.addEventListener('resize', resizeCanvases);
+
+  // Try WebGL first
+  vizGl = vizCanvas.getContext('webgl') || vizCanvas.getContext('experimental-webgl');
+  if (vizGl) {
+    useWebGL = true;
+    initWebGL();
+  } else {
+    useWebGL = false;
+    vizCtx2d = vizCanvas.getContext('2d');
+  }
+
+  grainCtx = grainCanvasEl.getContext('2d');
+}
+
+function resizeCanvases() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  vizCanvas.width = w * dpr;
+  vizCanvas.height = h * dpr;
+  vizCanvas.style.width = w + 'px';
+  vizCanvas.style.height = h + 'px';
+  grainCanvasEl.width = w * dpr;
+  grainCanvasEl.height = h * dpr;
+  grainCanvasEl.style.width = w + 'px';
+  grainCanvasEl.style.height = h + 'px';
+  if (vizGl) {
+    vizGl.viewport(0, 0, vizCanvas.width, vizCanvas.height);
+  }
+}
+
+// WebGL shaders
+const vertSrc = `
+attribute vec2 aPosition;
+void main() {
+  gl_Position = vec4(aPosition, 0.0, 1.0);
+}`;
+
+const fragSrc = `
+precision mediump float;
+uniform float uTime;
+uniform vec2 uResolution;
+uniform float uEnergy;
+uniform float uDensity;
+uniform float uShimmer;
+
+vec3 palette(float t) {
+  vec3 a = vec3(0.02, 0.02, 0.06);
+  vec3 b = vec3(0.4, 0.3, 0.5);
+  vec3 c = vec3(1.0, 1.0, 1.0);
+  vec3 d = vec3(0.26, 0.42, 0.78);
+  return a + b * cos(6.28318 * (c * t + d));
+}
+
+void main() {
+  vec2 uv = gl_FragCoord.xy / uResolution;
+  vec2 p = uv * 2.0 - 1.0;
+  p.x *= uResolution.x / uResolution.y;
+
+  float t = uTime * 0.15;
+  float energy = uEnergy;
+
+  float d = length(p);
+  float a = atan(p.y, p.x);
+
+  float r1 = sin(a * 3.0 + t * 1.2) * 0.3 * energy;
+  float r2 = sin(a * 5.0 - t * 0.8 + 1.5) * 0.2 * energy;
+  float r3 = sin(a * 7.0 + t * 0.5 + 3.0) * 0.15 * uShimmer;
+
+  float dist = d - 0.4 - r1 - r2 - r3;
+
+  float glow = 0.02 / (abs(dist) + 0.01);
+  glow *= energy * 0.5 + 0.1;
+
+  float ring1 = 0.005 / (abs(d - 0.6 - sin(t * 0.3) * 0.1 * energy) + 0.005);
+  float ring2 = 0.003 / (abs(d - 0.8 - cos(t * 0.4) * 0.08 * energy) + 0.005);
+
+  float nebula = 0.0;
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    vec2 np = p * (1.5 + fi * 0.5);
+    np += vec2(sin(t * 0.2 + fi), cos(t * 0.15 + fi * 1.3)) * 0.5;
+    float n = sin(np.x * 3.0 + t) * sin(np.y * 3.0 - t * 0.7) * 0.5 + 0.5;
+    nebula += n * 0.15 / (fi + 1.0);
+  }
+  nebula *= energy;
+
+  vec3 col = vec3(0.02, 0.02, 0.04);
+  col += palette(d * 0.5 + t * 0.1) * glow * 0.3;
+  col += vec3(0.39, 0.4, 0.95) * ring1 * 0.08 * energy;
+  col += vec3(0.55, 0.36, 0.96) * ring2 * 0.06 * energy;
+  col += palette(a * 0.15 + t * 0.05) * nebula;
+
+  float particles = 0.0;
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i);
+    float pa = fi * 1.047 + t * (0.1 + fi * 0.02);
+    float pr = 0.3 + sin(t * 0.2 + fi) * 0.2;
+    vec2 pp = vec2(cos(pa) * pr, sin(pa) * pr);
+    float pd = length(p - pp);
+    particles += 0.002 / (pd + 0.005) * energy;
+  }
+  col += vec3(0.93, 0.29, 0.6) * particles * 0.15;
+
+  col = pow(col, vec3(0.95));
+  col *= 1.0 - d * 0.3;
+
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+function initWebGL() {
+  const gl = vizGl;
+  vizStartTime = performance.now();
+
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, vertSrc);
+  gl.compileShader(vs);
+  if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) {
+    console.warn('Vertex shader error:', gl.getShaderInfoLog(vs));
+    useWebGL = false;
+    vizCtx2d = vizCanvas.getContext('2d');
+    return;
+  }
+
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, fragSrc);
+  gl.compileShader(fs);
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+    console.warn('Fragment shader error:', gl.getShaderInfoLog(fs));
+    useWebGL = false;
+    vizCtx2d = vizCanvas.getContext('2d');
+    return;
+  }
+
+  vizProgram = gl.createProgram();
+  gl.attachShader(vizProgram, vs);
+  gl.attachShader(vizProgram, fs);
+  gl.linkProgram(vizProgram);
+  if (!gl.getProgramParameter(vizProgram, gl.LINK_STATUS)) {
+    console.warn('Program link error:', gl.getProgramInfoLog(vizProgram));
+    useWebGL = false;
+    vizCtx2d = vizCanvas.getContext('2d');
+    return;
+  }
+
+  gl.useProgram(vizProgram);
+
+  const verts = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+  const aPos = gl.getAttribLocation(vizProgram, 'aPosition');
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+}
+
+function renderWebGL() {
+  const gl = vizGl;
+  if (!gl || !vizProgram) return;
+
+  gl.useProgram(vizProgram);
+
+  const time = (performance.now() - vizStartTime) / 1000;
+  const energy = playing ? Math.min(1, activeGrains / 10) * 0.8 + 0.2 : 0.05;
+
+  gl.uniform1f(gl.getUniformLocation(vizProgram, 'uTime'), time);
+  gl.uniform2f(gl.getUniformLocation(vizProgram, 'uResolution'), vizCanvas.width, vizCanvas.height);
+  gl.uniform1f(gl.getUniformLocation(vizProgram, 'uEnergy'), energy);
+  gl.uniform1f(gl.getUniformLocation(vizProgram, 'uDensity'), params.density / 80);
+  gl.uniform1f(gl.getUniformLocation(vizProgram, 'uShimmer'), params.shimmer);
+
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+function render2DFallback() {
+  if (!vizCtx2d) return;
+  const c = vizCtx2d;
+  const w = vizCanvas.width;
+  const h = vizCanvas.height;
+  const time = performance.now() / 1000;
+  const energy = playing ? Math.min(1, activeGrains / 10) * 0.8 + 0.2 : 0.05;
+
+  c.fillStyle = 'rgba(5, 5, 16, 0.15)';
+  c.fillRect(0, 0, w, h);
+
+  const cx = w / 2;
+  const cy = h / 2;
+
+  // Nebula glow
+  for (let i = 0; i < 3; i++) {
+    const r = (150 + i * 80) * energy * (w / 800);
+    const angle = time * 0.1 * (i + 1);
+    const ox = Math.sin(angle) * 30 * energy;
+    const oy = Math.cos(angle * 0.7) * 30 * energy;
+    const grad = c.createRadialGradient(cx + ox, cy + oy, 0, cx + ox, cy + oy, r);
+    const colors = [
+      [99, 102, 241],
+      [139, 92, 246],
+      [236, 72, 153],
+    ];
+    const col = colors[i];
+    grad.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${0.08 * energy})`);
+    grad.addColorStop(0.5, `rgba(${col[0]},${col[1]},${col[2]},${0.03 * energy})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, w, h);
+  }
+
+  // Rings
+  for (let i = 0; i < 2; i++) {
+    const radius = (120 + i * 80 + Math.sin(time * 0.3 + i) * 20 * energy) * (w / 800);
+    c.beginPath();
+    c.arc(cx, cy, radius, 0, Math.PI * 2);
+    c.strokeStyle = `rgba(99, 102, 241, ${0.1 * energy})`;
+    c.lineWidth = 1.5;
+    c.stroke();
+  }
+
+  // Floating particles
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2 + time * (0.1 + i * 0.02);
+    const dist = (80 + Math.sin(time * 0.2 + i) * 40) * energy * (w / 800);
+    const px = cx + Math.cos(angle) * dist;
+    const py = cy + Math.sin(angle) * dist;
+    const sz = (2 + Math.sin(time + i) * 1.5) * energy;
+    const grad2 = c.createRadialGradient(px, py, 0, px, py, sz * 4);
+    grad2.addColorStop(0, `rgba(236, 72, 153, ${0.4 * energy})`);
+    grad2.addColorStop(1, 'rgba(236, 72, 153, 0)');
+    c.fillStyle = grad2;
+    c.fillRect(px - sz * 4, py - sz * 4, sz * 8, sz * 8);
+  }
+
+  // Waveform overlay
+  if (analyser && playing) {
+    analyser.getByteTimeDomainData(analyserData);
+    c.beginPath();
+    c.strokeStyle = `rgba(6, 182, 212, ${0.25 * energy})`;
+    c.lineWidth = 1.5;
+    const sliceWidth = w / analyserData.length;
+    let x = 0;
+    for (let i = 0; i < analyserData.length; i++) {
+      const v = analyserData[i] / 128.0;
+      const y = cy + (v - 1) * 60 * energy * (h / 600);
+      if (i === 0) c.moveTo(x, y);
+      else c.lineTo(x, y);
+      x += sliceWidth;
+    }
+    c.stroke();
+  }
+}
+
+// Grain decoration canvas
+function spawnGrainParticle() {
+  if (grainParticles.length >= MAX_GRAIN_PARTICLES) return;
+  const w = grainCanvasEl.width;
+  const h = grainCanvasEl.height;
+  const dur = params.size / 1000;
+  const colors = ['99,102,241', '139,92,246', '236,72,153', '6,182,212'];
+  grainParticles.push({
+    x: Math.random() * w,
+    y: Math.random() * h,
+    width: (40 + Math.random() * 60) * (w / 800),
+    height: (12 + Math.random() * 16) * (h / 800),
+    life: 0,
+    maxLife: dur * 60 + 20,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    freq: 2 + Math.random() * 6,
+    attackRatio: params.attack,
+    vx: (Math.random() - 0.5) * 0.5,
+    vy: (Math.random() - 0.5) * 0.3 - 0.2,
+    opacity: 0.15 + Math.random() * 0.25,
+  });
+}
+
+function renderGrainCanvas() {
+  if (!grainCtx) return;
+  const c = grainCtx;
+  const w = grainCanvasEl.width;
+  const h = grainCanvasEl.height;
+
+  c.clearRect(0, 0, w, h);
+
+  if (playing && Math.random() < params.density / 40) {
+    spawnGrainParticle();
+  }
+
+  for (let i = grainParticles.length - 1; i >= 0; i--) {
+    const p = grainParticles[i];
+    p.life++;
+    p.x += p.vx;
+    p.y += p.vy;
+
+    if (p.life > p.maxLife) {
+      grainParticles.splice(i, 1);
+      continue;
+    }
+
+    const progress = p.life / p.maxLife;
+    // Bell-curve envelope
+    let env;
+    if (progress < p.attackRatio) {
+      env = progress / p.attackRatio;
+    } else {
+      env = 1 - (progress - p.attackRatio) / (1 - p.attackRatio);
+    }
+    env = Math.max(0, env);
+
+    const alpha = env * p.opacity;
+    if (alpha < 0.01) continue;
+
+    c.save();
+    c.translate(p.x, p.y);
+    c.globalAlpha = alpha;
+
+    // Envelope shape (bell curve outline)
+    c.beginPath();
+    const hw = p.width / 2;
+    const hh = p.height / 2;
+    for (let s = 0; s <= 1; s += 0.02) {
+      let envShape;
+      if (s < p.attackRatio) {
+        envShape = s / p.attackRatio;
+      } else {
+        envShape = 1 - (s - p.attackRatio) / (1 - p.attackRatio);
+      }
+      envShape = Math.pow(envShape, 0.8);
+      const sx = -hw + s * p.width;
+      const sy = -envShape * p.height;
+      if (s === 0) c.moveTo(sx, sy);
+      else c.lineTo(sx, sy);
+    }
+    c.strokeStyle = `rgba(${p.color}, ${alpha * 0.8})`;
+    c.lineWidth = 1;
+    c.stroke();
+
+    // Waveform inside envelope
+    c.beginPath();
+    for (let s = 0; s <= 1; s += 0.015) {
+      let envShape;
+      if (s < p.attackRatio) {
+        envShape = s / p.attackRatio;
+      } else {
+        envShape = 1 - (s - p.attackRatio) / (1 - p.attackRatio);
+      }
+      envShape = Math.pow(envShape, 0.8);
+      const sx = -hw + s * p.width;
+      const wave = Math.sin(s * p.freq * Math.PI * 2 + p.life * 0.15) * envShape;
+      const sy = -wave * p.height * 0.7;
+      if (s === 0) c.moveTo(sx, sy);
+      else c.lineTo(sx, sy);
+    }
+    c.strokeStyle = `rgba(${p.color}, ${alpha * 0.5})`;
+    c.lineWidth = 0.8;
+    c.stroke();
+
+    // Soft glow fill
+    const grad = c.createRadialGradient(0, -hh * 0.5, 0, 0, -hh * 0.5, hw);
+    grad.addColorStop(0, `rgba(${p.color}, ${alpha * 0.08})`);
+    grad.addColorStop(1, `rgba(${p.color}, 0)`);
+    c.fillStyle = grad;
+    c.fillRect(-hw, -p.height, p.width, p.height * 1.5);
+
+    c.restore();
+  }
+}
+
+// Animation loop
+function startViz() {
+  if (vizAnimId) return;
+  vizLoop();
+}
+
+function vizLoop() {
+  if (useWebGL) {
+    renderWebGL();
+  } else {
+    render2DFallback();
+  }
+  renderGrainCanvas();
+
+  // Update status
+  document.getElementById('grainCount').textContent = 'Grains: ' + activeGrains;
+
+  vizAnimId = requestAnimationFrame(vizLoop);
+}
+
+// ==================== INIT ====================
+
+window.addEventListener('DOMContentLoaded', () => {
+  initViz();
+  // Start idle viz loop
+  vizLoop();
+});
+
+// Prevent double-tap zoom
+document.addEventListener('dblclick', (e) => e.preventDefault());
+
+// Prevent context menu on long press
+document.addEventListener('contextmenu', (e) => e.preventDefault());
+</script>
+</body>
+</html>

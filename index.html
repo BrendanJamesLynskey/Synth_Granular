@@ -102,12 +102,11 @@
             backdrop-filter: blur(10px);
         }
         .feature-title {
-            font-size: 0.8rem;
+            font-size: 0.7rem;
             font-weight: 600;
             color: var(--accent-4);
             margin-bottom: 4px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.7rem;
             text-transform: uppercase;
             letter-spacing: 0.1em;
         }
@@ -116,26 +115,48 @@
             color: var(--text-dim);
             line-height: 1.4;
         }
+
+        /* Version buttons */
+        .version-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
         a.launch-btn {
             display: inline-flex;
             align-items: center;
             gap: 10px;
             font-family: 'Inter', sans-serif;
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 600;
             color: white;
             text-decoration: none;
-            padding: 1rem 2.5rem;
+            padding: 0.9rem 2rem;
             border-radius: 50px;
-            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
-            border: none;
-            box-shadow: 0 4px 20px var(--glow-1), 0 0 40px var(--glow-2);
+            border: 2px solid transparent;
             transition: all 0.3s ease;
             letter-spacing: 0.02em;
+            position: relative;
         }
-        a.launch-btn:hover {
+        a.launch-btn.primary {
+            background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+            box-shadow: 0 4px 20px var(--glow-1), 0 0 40px var(--glow-2);
+        }
+        a.launch-btn.primary:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 30px var(--glow-1), 0 0 60px var(--glow-2);
+        }
+        a.launch-btn.secondary {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.12);
+            backdrop-filter: blur(10px);
+        }
+        a.launch-btn.secondary:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: var(--accent-2);
+            transform: translateY(-2px);
         }
         a.launch-btn:active { transform: scale(0.97); }
         .launch-arrow {
@@ -143,11 +164,27 @@
             transition: transform 0.3s;
         }
         a.launch-btn:hover .launch-arrow { transform: translateX(3px); }
+        .btn-tag {
+            font-size: 0.6rem;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            opacity: 0.6;
+            position: absolute;
+            top: -8px;
+            right: 16px;
+            background: var(--accent-2);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 8px;
+            opacity: 0.9;
+        }
+
         .divider {
             display: flex;
             align-items: center;
             gap: 12px;
-            margin: 2.5rem 0 1.5rem;
+            margin: 2rem 0 1.5rem;
             width: 100%;
         }
         .divider-line {
@@ -162,7 +199,7 @@
             opacity: 0.5;
         }
         footer {
-            margin-top: 2rem;
+            margin-top: 1.5rem;
         }
         footer p {
             font-family: 'JetBrains Mono', monospace;
@@ -179,6 +216,7 @@
         @media (max-width: 480px) {
             .features { grid-template-columns: 1fr; }
             .content { padding: 0 0.5rem; }
+            .version-buttons { flex-direction: column; align-items: center; }
         }
     </style>
 </head>
@@ -188,11 +226,9 @@
     <div class="content">
         <div class="icon-glyph">
             <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- Abstract grain/wave symbol -->
                 <circle cx="50" cy="50" r="38" stroke="url(#g1)" stroke-width="1.5" opacity="0.4"/>
                 <circle cx="50" cy="50" r="28" stroke="url(#g1)" stroke-width="1" opacity="0.3"/>
                 <circle cx="50" cy="50" r="18" stroke="url(#g1)" stroke-width="0.8" opacity="0.2"/>
-                <!-- Scattered grains -->
                 <circle cx="50" cy="22" r="2.5" fill="#6366f1" opacity="0.9"/>
                 <circle cx="70" cy="35" r="2" fill="#8b5cf6" opacity="0.8"/>
                 <circle cx="75" cy="55" r="1.8" fill="#ec4899" opacity="0.7"/>
@@ -201,7 +237,6 @@
                 <circle cx="28" cy="62" r="2" fill="#8b5cf6" opacity="0.7"/>
                 <circle cx="26" cy="40" r="1.8" fill="#ec4899" opacity="0.8"/>
                 <circle cx="38" cy="28" r="1.5" fill="#06b6d4" opacity="0.6"/>
-                <!-- Centre pulse -->
                 <circle cx="50" cy="50" r="5" fill="url(#g2)" opacity="0.9"/>
                 <circle cx="50" cy="50" r="8" fill="url(#g2)" opacity="0.2"/>
                 <defs>
@@ -247,9 +282,14 @@
             </div>
         </div>
 
-        <a class="launch-btn" href="app.html">
-            Launch Synth <span class="launch-arrow">&rarr;</span>
-        </a>
+        <div class="version-buttons" id="versionButtons">
+            <a class="launch-btn primary" href="desktop.html" id="btnDesktop">
+                Desktop <span class="launch-arrow">&rarr;</span>
+            </a>
+            <a class="launch-btn secondary" href="granular_mobile.html" id="btnMobile">
+                Mobile <span class="launch-arrow">&rarr;</span>
+            </a>
+        </div>
 
         <div class="divider">
             <span class="divider-line"></span>
@@ -264,7 +304,27 @@
     </div>
 
     <script>
-        // Ambient particle background
+        // Device detection — recommend the right version
+        var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+                       (navigator.maxTouchPoints > 1 && window.innerWidth < 768);
+
+        var btnDesktop = document.getElementById('btnDesktop');
+        var btnMobile = document.getElementById('btnMobile');
+        var container = document.getElementById('versionButtons');
+
+        if (isMobile) {
+            btnMobile.classList.remove('secondary');
+            btnMobile.classList.add('primary');
+            btnMobile.innerHTML = '<span class="btn-tag">recommended</span>Mobile <span class="launch-arrow">&rarr;</span>';
+            btnDesktop.classList.remove('primary');
+            btnDesktop.classList.add('secondary');
+            // Reorder: mobile first
+            container.insertBefore(btnMobile, btnDesktop);
+        } else {
+            btnDesktop.innerHTML = '<span class="btn-tag">recommended</span>Desktop <span class="launch-arrow">&rarr;</span>';
+        }
+
+        // Grain envelope background animation
         const c = document.getElementById('bgCanvas');
         const ctx = c.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
@@ -277,8 +337,38 @@
         resize();
         window.addEventListener('resize', () => { ctx.setTransform(1,0,0,1,0,0); resize(); });
 
+        // Grain envelope shapes — inspired by Truax granular synthesis diagrams
+        class GrainEnvelope {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * W;
+                this.y = Math.random() * H;
+                this.width = 15 + Math.random() * 50;
+                this.height = 8 + Math.random() * 25;
+                this.freq = 2 + Math.random() * 8; // waveform cycles inside grain
+                this.hue = 240 + Math.random() * 80;
+                this.alpha = 0.03 + Math.random() * 0.12;
+                this.vx = (Math.random() - 0.5) * 0.3;
+                this.vy = (Math.random() - 0.5) * 0.2;
+                this.phase = Math.random() * Math.PI * 2;
+                this.life = 0;
+                this.maxLife = 200 + Math.random() * 400;
+                this.attackRatio = 0.1 + Math.random() * 0.3;
+            }
+        }
+
+        const grains = [];
+        for (let i = 0; i < 60; i++) {
+            const g = new GrainEnvelope();
+            g.life = Math.random() * g.maxLife;
+            grains.push(g);
+        }
+
+        // Floating ambient particles
         const dots = [];
-        for (let i = 0; i < 80; i++) {
+        for (let i = 0; i < 40; i++) {
             dots.push({
                 x: Math.random() * W,
                 y: Math.random() * H,
@@ -291,10 +381,86 @@
             });
         }
 
+        function drawGrainEnvelope(g, t) {
+            const lifeRatio = g.life / g.maxLife;
+            // Fade in/out
+            let fadeAlpha;
+            if (lifeRatio < 0.15) fadeAlpha = lifeRatio / 0.15;
+            else if (lifeRatio > 0.85) fadeAlpha = (1 - lifeRatio) / 0.15;
+            else fadeAlpha = 1;
+
+            const alpha = g.alpha * fadeAlpha;
+            if (alpha <= 0) return;
+
+            ctx.save();
+            ctx.translate(g.x, g.y);
+
+            // Draw grain envelope shape (bell curve with waveform inside)
+            const w = g.width;
+            const h = g.height;
+            const steps = Math.ceil(w);
+
+            // Envelope outline
+            ctx.beginPath();
+            ctx.moveTo(-w/2, 0);
+            for (let i = 0; i <= steps; i++) {
+                const xNorm = i / steps; // 0 to 1
+                const xPos = -w/2 + i;
+                // Bell-curve envelope: attack then decay
+                let envAmp;
+                if (xNorm < g.attackRatio) {
+                    envAmp = xNorm / g.attackRatio;
+                } else {
+                    envAmp = 1 - (xNorm - g.attackRatio) / (1 - g.attackRatio);
+                }
+                envAmp = Math.max(0, envAmp);
+                // Waveform inside envelope
+                const wave = Math.sin(xNorm * g.freq * Math.PI * 2 + g.phase + t * 0.5);
+                const yPos = -envAmp * h * (0.3 + 0.7 * (0.5 + 0.5 * wave));
+                if (i === 0) ctx.moveTo(xPos, 0);
+                ctx.lineTo(xPos, yPos);
+            }
+            ctx.lineTo(w/2, 0);
+            ctx.closePath();
+
+            const grad = ctx.createLinearGradient(-w/2, -h, w/2, 0);
+            grad.addColorStop(0, `hsla(${g.hue}, 70%, 65%, ${alpha * 0.8})`);
+            grad.addColorStop(1, `hsla(${g.hue}, 70%, 45%, ${alpha * 0.2})`);
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // Thin outline
+            ctx.strokeStyle = `hsla(${g.hue}, 70%, 70%, ${alpha * 0.5})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
         function draw() {
-            ctx.fillStyle = 'rgba(5,5,16,0.12)';
+            ctx.fillStyle = 'rgba(5,5,16,0.08)';
             ctx.fillRect(0, 0, W, H);
             const t = Date.now() * 0.001;
+
+            // Draw grain envelopes
+            for (const g of grains) {
+                g.x += g.vx + Math.sin(t * 0.15 + g.phase) * 0.1;
+                g.y += g.vy + Math.cos(t * 0.1 + g.phase) * 0.08;
+                g.life++;
+
+                if (g.life > g.maxLife || g.x < -100 || g.x > W + 100 || g.y < -100 || g.y > H + 100) {
+                    g.reset();
+                    // Spawn from edges or random positions
+                    if (Math.random() > 0.5) {
+                        g.x = Math.random() > 0.5 ? -g.width : W + g.width;
+                        g.y = Math.random() * H;
+                    }
+                }
+
+                drawGrainEnvelope(g, t);
+            }
+
+            // Draw ambient particles
             for (const d of dots) {
                 d.x += d.vx + Math.sin(t * 0.3 + d.pulse) * 0.15;
                 d.y += d.vy + Math.cos(t * 0.2 + d.pulse) * 0.15;
@@ -312,6 +478,23 @@
                 ctx.fillStyle = `hsla(${d.hue}, 70%, 65%, ${a * 0.08})`;
                 ctx.fill();
             }
+
+            // Draw grain stream lines (quasi-synchronous pattern)
+            const streamCount = 3;
+            for (let s = 0; s < streamCount; s++) {
+                const streamY = H * (0.15 + s * 0.35);
+                const streamAlpha = 0.02 + 0.01 * Math.sin(t * 0.3 + s);
+                ctx.strokeStyle = `hsla(${260 + s * 30}, 60%, 50%, ${streamAlpha})`;
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                for (let x = 0; x < W; x += 2) {
+                    const y = streamY + Math.sin(x * 0.01 + t * 0.2 + s * 2) * 20;
+                    if (x === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
             requestAnimationFrame(draw);
         }
         draw();

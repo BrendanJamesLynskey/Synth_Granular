@@ -45,6 +45,14 @@ body {
   z-index: 0;
 }
 
+#grainCanvas {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
 .controls {
   position: relative;
   z-index: 10;
@@ -237,6 +245,7 @@ input[type="range"]::-moz-range-thumb {
 <body>
 
 <canvas id="vizCanvas"></canvas>
+<canvas id="grainCanvas"></canvas>
 
 <div class="controls">
   <div class="header">
@@ -1129,6 +1138,9 @@ function renderViz() {
     render2D(audioVals);
   }
 
+  // Update grain decoration layer
+  renderGrainGraphics(audioVals);
+
   // Update status
   document.getElementById('grainCount').textContent = 'grains: ' + activeGrains;
   const cpuEst = Math.min(99, Math.round(activeGrains * 1.5));
@@ -1208,6 +1220,301 @@ if (gl) {
 
 // Start ambient viz even before playing
 startViz();
+
+
+// ===== GRAIN ENVELOPE GRAPHICS LAYER =====
+// Inspired by Barry Truax's granular synthesis diagrams:
+// Bell-curve envelopes with waveforms inside, arranged in streams
+// and scattered asynchronously across the screen.
+
+const grainGfxCanvas = document.getElementById('grainCanvas');
+const grainGfxCtx = grainGfxCanvas.getContext('2d');
+
+// Grain envelope objects for the decoration layer
+const decorGrains = [];
+const MAX_DECOR_GRAINS = 120;
+
+// Stream definitions: horizontal bands where quasi-synchronous grains flow
+const grainStreams = [];
+const NUM_STREAMS = 6;
+
+function resizeGrainCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  grainGfxCanvas.width = window.innerWidth * dpr;
+  grainGfxCanvas.height = window.innerHeight * dpr;
+  grainGfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Reinitialize streams on resize
+  grainStreams.length = 0;
+  const h = window.innerHeight;
+  for (let i = 0; i < NUM_STREAMS; i++) {
+    grainStreams.push({
+      y: (h * 0.08) + (h * 0.84) * (i / (NUM_STREAMS - 1)),
+      speed: 0.15 + Math.random() * 0.4,
+      direction: Math.random() > 0.5 ? 1 : -1,
+      hue: 240 + (80 / NUM_STREAMS) * i,
+      density: 0.3 + Math.random() * 0.5,
+      phase: Math.random() * Math.PI * 2,
+      waviness: 5 + Math.random() * 15
+    });
+  }
+}
+
+window.addEventListener('resize', resizeGrainCanvas);
+resizeGrainCanvas();
+
+// Bell-curve (Gaussian-like) envelope function: 0..1 over normalized x (0..1)
+function bellCurve(x, attackRatio) {
+  // Attempt an asymmetric envelope: fast attack, longer decay
+  if (x < attackRatio) {
+    // Attack: raised cosine
+    const t = x / attackRatio;
+    return 0.5 - 0.5 * Math.cos(Math.PI * t);
+  } else {
+    // Decay: raised cosine
+    const t = (x - attackRatio) / (1 - attackRatio);
+    return 0.5 + 0.5 * Math.cos(Math.PI * t);
+  }
+}
+
+function spawnDecorGrain(x, y, streamIndex, isAsync) {
+  if (decorGrains.length >= MAX_DECOR_GRAINS) return;
+
+  const w = window.innerWidth;
+  const hue = 240 + Math.random() * 80; // indigo through violet to pink (240-320)
+  const width = 30 + Math.random() * 60;
+  const height = 8 + Math.random() * 16;
+  const freq = 1 + Math.random() * 4; // wave cycles inside envelope
+  const attackRatio = 0.2 + Math.random() * 0.5;
+  const maxLife = 120 + Math.random() * 200; // frames
+
+  decorGrains.push({
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    freq: freq,
+    hue: hue,
+    alpha: 0,
+    targetAlpha: 0.04 + Math.random() * 0.08,
+    vx: isAsync ? (Math.random() - 0.5) * 0.5 : (streamIndex >= 0 ? grainStreams[streamIndex].speed * grainStreams[streamIndex].direction : 0.2),
+    vy: isAsync ? (Math.random() - 0.5) * 0.3 : Math.sin(grainStreams[streamIndex >= 0 ? streamIndex : 0].phase) * 0.1,
+    phase: Math.random() * Math.PI * 2,
+    life: 0,
+    maxLife: maxLife,
+    attackRatio: attackRatio,
+    streamIndex: streamIndex,
+    isAsync: isAsync,
+    rotation: (Math.random() - 0.5) * 0.15
+  });
+}
+
+// Draw a single grain envelope with waveform inside
+function drawGrainEnvelope(g) {
+  const gc = grainGfxCtx;
+  const steps = Math.max(20, Math.floor(g.width / 2));
+
+  gc.save();
+  gc.translate(g.x, g.y);
+  gc.rotate(g.rotation);
+
+  // Life-based alpha: fade in, sustain, fade out
+  const lifeRatio = g.life / g.maxLife;
+  let lifeAlpha;
+  if (lifeRatio < 0.1) {
+    lifeAlpha = lifeRatio / 0.1;
+  } else if (lifeRatio > 0.7) {
+    lifeAlpha = (1 - lifeRatio) / 0.3;
+  } else {
+    lifeAlpha = 1;
+  }
+  const alpha = g.alpha * lifeAlpha;
+
+  if (alpha < 0.002) {
+    gc.restore();
+    return;
+  }
+
+  // Draw the bell-curve envelope outline
+  gc.beginPath();
+  // Top half of envelope
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const envVal = bellCurve(t, g.attackRatio);
+    const px = -g.width / 2 + t * g.width;
+    const py = -envVal * g.height;
+    if (i === 0) gc.moveTo(px, py);
+    else gc.lineTo(px, py);
+  }
+  // Bottom half (mirror)
+  for (let i = steps; i >= 0; i--) {
+    const t = i / steps;
+    const envVal = bellCurve(t, g.attackRatio);
+    const px = -g.width / 2 + t * g.width;
+    const py = envVal * g.height;
+    gc.lineTo(px, py);
+  }
+  gc.closePath();
+
+  // Fill with very subtle color
+  gc.fillStyle = `hsla(${g.hue}, 70%, 60%, ${alpha * 0.3})`;
+  gc.fill();
+
+  // Stroke the envelope outline
+  gc.strokeStyle = `hsla(${g.hue}, 80%, 70%, ${alpha * 0.6})`;
+  gc.lineWidth = 0.8;
+  gc.stroke();
+
+  // Draw waveform inside the envelope (clipped)
+  gc.save();
+  gc.clip();
+  gc.beginPath();
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const envVal = bellCurve(t, g.attackRatio);
+    const px = -g.width / 2 + t * g.width;
+    const waveY = Math.sin(t * g.freq * Math.PI * 2 + g.phase) * envVal * g.height * 0.7;
+    if (i === 0) gc.moveTo(px, waveY);
+    else gc.lineTo(px, waveY);
+  }
+  gc.strokeStyle = `hsla(${g.hue}, 90%, 75%, ${alpha * 0.8})`;
+  gc.lineWidth = 0.6;
+  gc.stroke();
+  gc.restore();
+
+  gc.restore();
+}
+
+// Draw faint horizontal stream lines
+function drawStreamLines(energy) {
+  const gc = grainGfxCtx;
+  const w = window.innerWidth;
+
+  for (let i = 0; i < grainStreams.length; i++) {
+    const s = grainStreams[i];
+    const baseAlpha = 0.015 + energy * 0.03;
+
+    gc.beginPath();
+    for (let x = 0; x <= w; x += 4) {
+      const t = x / w;
+      const waveOffset = Math.sin(t * 8 + s.phase + vizTime * s.speed * 0.5) * s.waviness;
+      const y = s.y + waveOffset;
+      if (x === 0) gc.moveTo(x, y);
+      else gc.lineTo(x, y);
+    }
+
+    gc.strokeStyle = `hsla(${s.hue}, 50%, 55%, ${baseAlpha})`;
+    gc.lineWidth = 1;
+    gc.stroke();
+
+    // Draw dashes along the stream to suggest grain timing (quasi-synchronous)
+    const dashSpacing = 40 + 20 * Math.sin(vizTime * 0.3 + i);
+    const offset = (vizTime * s.speed * 30 * s.direction) % dashSpacing;
+    gc.beginPath();
+    for (let x = offset; x < w; x += dashSpacing) {
+      const t = x / w;
+      const waveOffset = Math.sin(t * 8 + s.phase + vizTime * s.speed * 0.5) * s.waviness;
+      const y = s.y + waveOffset;
+      gc.moveTo(x, y - 2);
+      gc.lineTo(x, y + 2);
+    }
+    gc.strokeStyle = `hsla(${s.hue}, 60%, 65%, ${baseAlpha * 1.5})`;
+    gc.lineWidth = 1.5;
+    gc.stroke();
+
+    // Update stream phase
+    s.phase += 0.008 * s.speed;
+  }
+}
+
+let grainSpawnTimer = 0;
+
+function renderGrainGraphics(audioVals) {
+  const gc = grainGfxCtx;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+
+  // Clear the grain canvas completely (it overlays the WebGL viz)
+  gc.clearRect(0, 0, w, h);
+
+  // Calculate audio energy
+  let energy = 0;
+  if (audioVals) {
+    energy = (audioVals[0] * 0.4 + audioVals[2] * 0.3 + audioVals[4] * 0.3);
+  }
+
+  // Draw faint stream lines
+  drawStreamLines(energy);
+
+  // Spawn new grains
+  grainSpawnTimer++;
+  const spawnRate = playing ? (3 + energy * 8 + params.density * 0.1) : 1.5;
+  if (grainSpawnTimer % Math.max(1, Math.floor(6 / spawnRate)) === 0) {
+    // Spawn a stream-aligned grain (quasi-synchronous)
+    if (Math.random() < 0.6) {
+      const si = Math.floor(Math.random() * grainStreams.length);
+      const s = grainStreams[si];
+      const startX = s.direction > 0 ? -40 : w + 40;
+      const waveOffset = Math.sin(s.phase) * s.waviness;
+      spawnDecorGrain(startX, s.y + waveOffset + (Math.random() - 0.5) * 10, si, false);
+    }
+
+    // Spawn an asynchronous scattered grain
+    if (Math.random() < 0.4 + energy * 0.3) {
+      const ax = Math.random() * w;
+      const ay = Math.random() * h;
+      spawnDecorGrain(ax, ay, -1, true);
+    }
+  }
+
+  // When playing, spawn extra grains reacting to audio
+  if (playing && energy > 0.1 && Math.random() < energy * 0.5) {
+    const ax = Math.random() * w;
+    const ay = Math.random() * h;
+    spawnDecorGrain(ax, ay, -1, true);
+  }
+
+  // Update and draw all decoration grains
+  for (let i = decorGrains.length - 1; i >= 0; i--) {
+    const g = decorGrains[i];
+
+    // Update position
+    g.x += g.vx;
+    if (!g.isAsync && g.streamIndex >= 0) {
+      const s = grainStreams[g.streamIndex];
+      const t = g.x / w;
+      g.vy = Math.cos(t * 8 + s.phase + vizTime * s.speed * 0.5) * s.waviness * 0.02 * s.speed;
+    }
+    g.y += g.vy;
+
+    // Update phase for waveform animation
+    g.phase += 0.02 + energy * 0.05;
+
+    // Fade alpha toward target
+    g.alpha += (g.targetAlpha - g.alpha) * 0.05;
+
+    // Audio reactivity: pulse grain size slightly
+    if (playing && energy > 0) {
+      const pulse = 1 + energy * 0.15;
+      g.width *= (1 + (pulse - 1) * 0.02);
+      g.height *= (1 + (pulse - 1) * 0.02);
+      // Clamp to prevent runaway growth
+      g.width = Math.min(g.width, 150);
+      g.height = Math.min(g.height, 30);
+    }
+
+    // Advance life
+    g.life++;
+
+    // Remove dead grains or out of bounds
+    if (g.life > g.maxLife || g.x < -100 || g.x > w + 100 || g.y < -100 || g.y > h + 100) {
+      decorGrains.splice(i, 1);
+      continue;
+    }
+
+    drawGrainEnvelope(g);
+  }
+}
 
 </script>
 </body>

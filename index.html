@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #050510;
+            --bg: #000000;
             --accent-1: #6366f1;
             --accent-2: #8b5cf6;
             --accent-3: #ec4899;
@@ -339,7 +339,7 @@
             btnDesktop.innerHTML = '<span class="btn-tag">recommended</span>Desktop <span class="launch-arrow">&rarr;</span>';
         }
 
-        // Spectrogram background animation
+        // Sparse particle background
         const c = document.getElementById('bgCanvas');
         const ctx = c.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
@@ -352,127 +352,38 @@
         resize();
         window.addEventListener('resize', () => { ctx.setTransform(1,0,0,1,0,0); resize(); });
 
-        // Spectrogram state
-        const SPEC_BINS = 48;
-        const specColumns = [];
-        const specColWidth = 2;
-        let specTime = 0;
-
-        // Procedural harmonic bands for idle animation
-        const idleHarmonics = [];
-        for (let i = 0; i < 6; i++) {
-            idleHarmonics.push({
-                freq: 0.05 + Math.random() * 0.45,
-                bandwidth: 0.012 + Math.random() * 0.035,
-                intensity: 0.15 + Math.random() * 0.4,
-                drift: (Math.random() - 0.5) * 0.00015,
-                phase: Math.random() * Math.PI * 2,
-                wobble: 0.001 + Math.random() * 0.003
-            });
-        }
-
-        function specColor(intensity) {
-            const i = Math.max(0, Math.min(1, intensity));
-            if (i < 0.05) return 'rgba(5,5,16,0)';
-            let r, g, b, a;
-            if (i < 0.25) {
-                const t = i / 0.25;
-                r = Math.floor(15 + 45 * t); g = Math.floor(10 + 30 * t); b = Math.floor(40 + 120 * t); a = 0.3 + t * 0.3;
-            } else if (i < 0.5) {
-                const t = (i - 0.25) / 0.25;
-                r = Math.floor(60 + 79 * t); g = Math.floor(40 + 52 * t); b = Math.floor(160 + 86 * t); a = 0.6 + t * 0.15;
-            } else if (i < 0.75) {
-                const t = (i - 0.5) / 0.25;
-                r = Math.floor(139 + 97 * t); g = Math.floor(92 - 20 * t); b = Math.floor(246 - 93 * t); a = 0.75 + t * 0.1;
-            } else {
-                const t = (i - 0.75) / 0.25;
-                r = Math.floor(236 + 19 * t); g = Math.floor(72 + 140 * t); b = Math.floor(153 + 59 * t); a = 0.85 + t * 0.15;
-            }
-            return `rgba(${r},${g},${b},${a})`;
-        }
-
-        function generateColumn(time) {
-            const col = new Float32Array(SPEC_BINS);
-            for (let i = 0; i < SPEC_BINS; i++) {
-                const binNorm = i / SPEC_BINS;
-                col[i] = Math.random() * 0.015;
-                for (const h of idleHarmonics) {
-                    const dist = Math.abs(binNorm - h.freq);
-                    if (dist < h.bandwidth * 3) {
-                        const gaussian = Math.exp(-(dist * dist) / (2 * h.bandwidth * h.bandwidth));
-                        col[i] += gaussian * h.intensity * (0.7 + 0.3 * Math.sin(time * 0.5 + h.phase));
-                    }
-                }
-            }
-            for (const h of idleHarmonics) {
-                h.freq += h.drift + Math.sin(time * 0.3 + h.phase) * 0.0001;
-                if (h.freq < 0.02 || h.freq > 0.95) h.drift *= -1;
-                h.freq = Math.max(0.02, Math.min(0.95, h.freq));
-            }
-            return col;
-        }
-
-        const maxCols = () => Math.ceil(W / specColWidth) + 2;
-
-        // Floating ambient particles (kept for depth)
-        const dots = [];
-        for (let i = 0; i < 30; i++) {
-            dots.push({
-                x: Math.random() * W, y: Math.random() * H,
-                vx: (Math.random() - 0.5) * 0.2, vy: (Math.random() - 0.5) * 0.2,
-                r: 0.8 + Math.random() * 1.5, hue: 240 + Math.random() * 80,
-                alpha: 0.08 + Math.random() * 0.15, pulse: Math.random() * Math.PI * 2,
+        const particles = [];
+        const COUNT = 50 + Math.floor(Math.random() * 40);
+        for (let i = 0; i < COUNT; i++) {
+            particles.push({
+                x: Math.random() * W,
+                y: Math.random() * H,
+                vx: (Math.random() - 0.5) * 0.3,
+                vy: (Math.random() - 0.5) * 0.3,
+                r: 0.5 + Math.random() * 2.5,
+                hue: 240 + Math.random() * 80,
+                alpha: 0.15 + Math.random() * 0.5,
+                pulse: Math.random() * Math.PI * 2,
             });
         }
 
         function draw() {
-            ctx.fillStyle = 'rgba(5,5,16,0.12)';
+            ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, W, H);
-            specTime += 0.016;
-
-            // Generate and push new spectrogram column
-            const newCol = generateColumn(specTime);
-            specColumns.push(newCol);
-            const mc = maxCols();
-            while (specColumns.length > mc) specColumns.shift();
-
-            // Draw spectrogram (scrolling right to left)
-            const colCount = specColumns.length;
-            const startX = W - colCount * specColWidth;
-            ctx.globalAlpha = 0.4;
-
-            for (let ci = 0; ci < colCount; ci++) {
-                const col = specColumns[ci];
-                const x = startX + ci * specColWidth;
-                const edgeFade = Math.min(1, (ci / colCount) * 3);
-                for (let bin = 0; bin < SPEC_BINS; bin++) {
-                    const intensity = col[bin] * edgeFade;
-                    if (intensity < 0.03) continue;
-                    const binNorm = bin / SPEC_BINS;
-                    const y = H - (binNorm * H);
-                    const binHeight = Math.ceil(H / SPEC_BINS) + 1;
-                    ctx.fillStyle = specColor(intensity);
-                    ctx.fillRect(x, y - binHeight, specColWidth, binHeight);
-                }
-            }
-            ctx.globalAlpha = 1.0;
-
-            // Floating particles over spectrogram
             const t = Date.now() * 0.001;
-            for (const d of dots) {
-                d.x += d.vx + Math.sin(t * 0.3 + d.pulse) * 0.1;
-                d.y += d.vy + Math.cos(t * 0.2 + d.pulse) * 0.1;
-                if (d.x < -10) d.x = W + 10;
-                if (d.x > W + 10) d.x = -10;
-                if (d.y < -10) d.y = H + 10;
-                if (d.y > H + 10) d.y = -10;
-                const a = d.alpha * (0.6 + 0.4 * Math.sin(t * 0.7 + d.pulse));
+            for (const p of particles) {
+                p.x += p.vx + Math.sin(t * 0.2 + p.pulse) * 0.08;
+                p.y += p.vy + Math.cos(t * 0.15 + p.pulse) * 0.08;
+                if (p.x < -10) p.x = W + 10;
+                if (p.x > W + 10) p.x = -10;
+                if (p.y < -10) p.y = H + 10;
+                if (p.y > H + 10) p.y = -10;
+                const a = p.alpha * (0.6 + 0.4 * Math.sin(t * 0.5 + p.pulse));
                 ctx.beginPath();
-                ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-                ctx.fillStyle = `hsla(${d.hue}, 70%, 65%, ${a})`;
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${p.hue}, 70%, 65%, ${a})`;
                 ctx.fill();
             }
-
             requestAnimationFrame(draw);
         }
         draw();

@@ -1222,194 +1222,64 @@ if (gl) {
 startViz();
 
 
-// ===== SPECTROGRAM GRAPHICS LAYER =====
-// Scrolling spectrogram inspired by microsound analysis visualisations
+// ===== SPARSE PARTICLE GRAPHICS LAYER =====
 
 const grainGfxCanvas = document.getElementById('grainCanvas');
 const grainGfxCtx = grainGfxCanvas.getContext('2d');
 
-// Spectrogram buffer: each column is an array of frequency bin intensities
-const SPEC_BINS = 64;
-const specColumns = [];
-let specScrollOffset = 0;
-let specColumnWidth = 0;
-let specMaxColumns = 0;
-
-// Procedural harmonic state for idle animation
-const idleHarmonics = [];
-for (let i = 0; i < 8; i++) {
-  idleHarmonics.push({
-    freq: 0.05 + Math.random() * 0.4,  // normalized freq position (0=bottom, 1=top)
-    bandwidth: 0.01 + Math.random() * 0.04,
-    intensity: 0.15 + Math.random() * 0.4,
-    drift: (Math.random() - 0.5) * 0.0002,
-    phase: Math.random() * Math.PI * 2,
-    wobble: 0.001 + Math.random() * 0.003
-  });
-}
+const sparseParticles = [];
+const PARTICLE_COUNT = 60 + Math.floor(Math.random() * 50);
 
 function resizeGrainCanvas() {
   const dpr = window.devicePixelRatio || 1;
   grainGfxCanvas.width = window.innerWidth * dpr;
   grainGfxCanvas.height = window.innerHeight * dpr;
   grainGfxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  specColumnWidth = 2;
-  specMaxColumns = Math.ceil(window.innerWidth / specColumnWidth) + 2;
 }
 
-window.addEventListener('resize', resizeGrainCanvas);
+function initParticles() {
+  sparseParticles.length = 0;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    sparseParticles.push({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      r: 0.5 + Math.random() * 2.5,
+      hue: 240 + Math.random() * 80,
+      alpha: 0.15 + Math.random() * 0.5,
+      pulse: Math.random() * Math.PI * 2,
+    });
+  }
+}
+
+window.addEventListener('resize', () => { resizeGrainCanvas(); initParticles(); });
 resizeGrainCanvas();
-
-// Color mapping: intensity (0-1) to spectrogram color
-function specColor(intensity, binNorm) {
-  // Dark background → deep indigo → violet → pink → white-hot
-  const i = Math.max(0, Math.min(1, intensity));
-  if (i < 0.05) return 'rgba(5,5,16,0)';
-
-  let r, g, b, a;
-  if (i < 0.25) {
-    // Dark to deep indigo
-    const t = i / 0.25;
-    r = Math.floor(15 + 45 * t);
-    g = Math.floor(10 + 30 * t);
-    b = Math.floor(40 + 120 * t);
-    a = 0.3 + t * 0.3;
-  } else if (i < 0.5) {
-    // Deep indigo to violet
-    const t = (i - 0.25) / 0.25;
-    r = Math.floor(60 + 79 * t);
-    g = Math.floor(40 + 52 * t);
-    b = Math.floor(160 + 86 * t);
-    a = 0.6 + t * 0.15;
-  } else if (i < 0.75) {
-    // Violet to pink
-    const t = (i - 0.5) / 0.25;
-    r = Math.floor(139 + 97 * t);
-    g = Math.floor(92 - 20 * t);
-    b = Math.floor(246 - 93 * t);
-    a = 0.75 + t * 0.1;
-  } else {
-    // Pink to bright cyan-white
-    const t = (i - 0.75) / 0.25;
-    r = Math.floor(236 + 19 * t);
-    g = Math.floor(72 + 140 * t);
-    b = Math.floor(153 + 59 * t);
-    a = 0.85 + t * 0.15;
-  }
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-// Generate a spectrogram column from audio data or procedural
-function generateSpecColumn(audioVals, time) {
-  const col = new Float32Array(SPEC_BINS);
-
-  if (playing && analyser && freqData) {
-    // Use real FFT data, downsampled to SPEC_BINS
-    analyser.getByteFrequencyData(freqData);
-    const binSize = Math.floor(freqData.length / SPEC_BINS);
-    for (let i = 0; i < SPEC_BINS; i++) {
-      let sum = 0;
-      for (let j = 0; j < binSize; j++) {
-        sum += freqData[i * binSize + j];
-      }
-      col[i] = (sum / binSize) / 255;
-      // Boost low and mid frequencies slightly for visual appeal
-      col[i] *= 1.0 + (1.0 - i / SPEC_BINS) * 0.3;
-    }
-  } else {
-    // Procedural idle spectrogram: drifting harmonic bands + noise floor
-    for (let i = 0; i < SPEC_BINS; i++) {
-      const binNorm = i / SPEC_BINS;
-      // Noise floor
-      col[i] = Math.random() * 0.02;
-
-      // Harmonic bands
-      for (const h of idleHarmonics) {
-        const dist = Math.abs(binNorm - h.freq);
-        if (dist < h.bandwidth * 3) {
-          const gaussian = Math.exp(-(dist * dist) / (2 * h.bandwidth * h.bandwidth));
-          const wobbleAmt = Math.sin(time * 2 + h.phase) * h.wobble * 10;
-          col[i] += gaussian * h.intensity * (0.7 + 0.3 * Math.sin(time * 0.5 + h.phase + wobbleAmt));
-        }
-      }
-    }
-
-    // Update idle harmonics drift
-    for (const h of idleHarmonics) {
-      h.freq += h.drift + Math.sin(time * 0.3 + h.phase) * 0.0001;
-      if (h.freq < 0.02 || h.freq > 0.95) h.drift *= -1;
-      h.freq = Math.max(0.02, Math.min(0.95, h.freq));
-    }
-  }
-
-  return col;
-}
+initParticles();
 
 function renderGrainGraphics(audioVals) {
   const gc = grainGfxCtx;
   const w = window.innerWidth;
   const h = window.innerHeight;
-  const time = vizTime;
+  const t = vizTime;
 
   gc.clearRect(0, 0, w, h);
 
-  // Generate and push new column
-  const newCol = generateSpecColumn(audioVals, time);
-  specColumns.push(newCol);
-  if (specColumns.length > specMaxColumns) specColumns.shift();
-
-  // Draw spectrogram scrolling from right to left
-  const colCount = specColumns.length;
-  const startX = w - colCount * specColumnWidth;
-
-  // Overall alpha for subtlety
-  gc.globalAlpha = 0.35;
-
-  for (let c = 0; c < colCount; c++) {
-    const col = specColumns[c];
-    const x = startX + c * specColumnWidth;
-    // Fade out columns near the left edge
-    const edgeFade = Math.min(1, (c / colCount) * 3);
-
-    for (let bin = 0; bin < SPEC_BINS; bin++) {
-      const intensity = col[bin] * edgeFade;
-      if (intensity < 0.03) continue;
-      const binNorm = bin / SPEC_BINS;
-      // Frequency axis: low at bottom, high at top
-      const y = h - (binNorm * h);
-      const binHeight = Math.ceil(h / SPEC_BINS) + 1;
-
-      gc.fillStyle = specColor(intensity, binNorm);
-      gc.fillRect(x, y - binHeight, specColumnWidth, binHeight);
-    }
+  for (const p of sparseParticles) {
+    p.x += p.vx + Math.sin(t * 0.2 + p.pulse) * 0.08;
+    p.y += p.vy + Math.cos(t * 0.15 + p.pulse) * 0.08;
+    if (p.x < -10) p.x = w + 10;
+    if (p.x > w + 10) p.x = -10;
+    if (p.y < -10) p.y = h + 10;
+    if (p.y > h + 10) p.y = -10;
+    const a = p.alpha * (0.6 + 0.4 * Math.sin(t * 0.5 + p.pulse));
+    gc.beginPath();
+    gc.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    gc.fillStyle = `hsla(${p.hue}, 70%, 65%, ${a})`;
+    gc.fill();
   }
-
-  // Add soft horizontal glow lines at prominent frequencies (when playing)
-  if (playing && audioVals) {
-    const energy = (audioVals[0] * 0.4 + audioVals[2] * 0.3 + audioVals[4] * 0.3);
-    if (energy > 0.1) {
-      // Find peak bins
-      const lastCol = specColumns[specColumns.length - 1];
-      if (lastCol) {
-        for (let bin = 1; bin < SPEC_BINS - 1; bin++) {
-          if (lastCol[bin] > 0.4 && lastCol[bin] > lastCol[bin-1] && lastCol[bin] > lastCol[bin+1]) {
-            const binNorm = bin / SPEC_BINS;
-            const y = h - (binNorm * h);
-            const grad = gc.createLinearGradient(0, y, w, y);
-            const glowAlpha = lastCol[bin] * energy * 0.08;
-            grad.addColorStop(0, `rgba(139,92,246,0)`);
-            grad.addColorStop(0.3, `rgba(139,92,246,${glowAlpha})`);
-            grad.addColorStop(0.7, `rgba(236,72,153,${glowAlpha})`);
-            grad.addColorStop(1, `rgba(236,72,153,0)`);
-            gc.fillStyle = grad;
-            gc.fillRect(0, y - 2, w, 4);
-          }
-        }
-      }
-    }
-  }
-
-  gc.globalAlpha = 1.0;
 }
 
 </script>
